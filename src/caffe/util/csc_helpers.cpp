@@ -217,4 +217,43 @@ template void col2im_csc_cpu<double>(const double *patches, const int nsamples, 
       const int height, const int width, const int kernel_h, const int kernel_w,
       CSCParameter::Boundary boundary, double *blob);
 
+template <>
+void csc_local_inverse_naive(const int m, const float lambda2, const float *DtD,
+    const float *l, const int *index, const int nnz, float *beta) {
+  if (nnz == 0) return;
+  vector<float> DtD_shrunk(nnz*nnz);
+  for (int i = 0; i < nnz; ++i) {
+	for (in j = 0; j < nnz; ++j) {
+	  DtD_shrunk[i*nnz + j] = DtD[index[i]*m + index[j]];
+	  if (j == i) {
+		DtD_shrunk[i*nnz + j] += lambda2;
+	  }
+	}
+  }
+  int info = LAPACKE_spotrf(LAPACK_ROW_MAJOR, 'L', nnz, DtD_shrunk.data(), nnz);
+  CHECK_EQ(info, 0) << "Cholesky factorization is not successful!";
+  caffe_copy(nnz, l, beta);
+  info = LAPACKE_spotrs(LAPACK_ROW_MAJOR, 'L', nnz, nnz, DtD_shrunk.data(), beta, nnz, nnz);
+  CHECK_EQ(info, 0) << "Solving linear system is not successful!";
+}
+template <>
+void csc_local_inverse_naive(const int m, const double lambda2, const double *DtD,
+    const double *l, const int *index, const int nnz, double *beta) {
+  if (nnz == 0) return;
+  vector<double> DtD_shrunk(nnz*nnz);
+  for (int i = 0; i < nnz; ++i) {
+	for (in j = 0; j < nnz; ++j) {
+	  DtD_shrunk[i*nnz + j] = DtD[index[i]*m + index[j]];
+	  if (j == i) {
+		DtD_shrunk[i*nnz + j] += lambda2;
+	  }
+	}
+  }
+  int info = LAPACKE_dpotrf(LAPACK_ROW_MAJOR, 'L', nnz, DtD_shrunk.data(), nnz);
+  CHECK_EQ(info, 0) << "Cholesky factorization is not successful!";
+  caffe_copy(nnz, l, beta);
+  info = LAPACKE_dpotrs(LAPACK_ROW_MAJOR, 'L', nnz, nnz, DtD_shrunk.data(), beta, nnz, nnz);
+  CHECK_EQ(info, 0) << "Solving linear system is not successful!";
+}
+
 } // namespace caffe

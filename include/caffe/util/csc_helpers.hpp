@@ -45,6 +45,15 @@ void col2im_csc_gpu(const Dtype *patches, const int nsamples, const int channels
     const int height, const int width, const int kernel_h, const int kernel_w,
     const CSCParameter::Boundary boundary, Dtype *blob);
 
+// Utility function for solving the following problem:
+// (DtD + lambda2*I)beta = l.
+// Here DtD is truncated such that only entries in `index` is not zero.
+// l, index and beta all have length of nnz.
+// WARNING: very naive implementation!
+template <typename Dtype>
+void csc_local_inverse_naive(const int m, const Dtype lambda2, const Dtype *DtD,
+    const Dtype *l, const int *index, const int nnz, Dtype *beta);
+
 } // namespace caffe
 
 #endif // CAFFE_CSC_HELPERS_HPP_
