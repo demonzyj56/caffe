@@ -88,7 +88,8 @@ void CSCLayer<Dtype>::Forward_cpu(const vector<Blob<Dtype>*>& bottom,
   for (int t = 0; t < admm_max_iter_; ++t) {
     // local sparse pursuit
     caffe_axpy(slice.count(), Dtype(1), dual_var.cpu_data(), slice.mutable_cpu_data());
-    lasso_cpu(&slice, &this->blob_[0], lambda1_/rho, lambda2_/rho, lasso_lars_L_, &alpha);
+    lasso_cpu(&slice, &this->blob_[0], lambda1_/rho, lambda2_/rho, lasso_lars_L_, &alpha,
+      &this->spalpha_);
     caffe_cpu_gemm(CblasNoTrans, CblasNoTrans, patch_size, alpha.shape(1),
       num_output_, Dtype(1), this->blob_[0].cpu_data(), alpha.cpu_data(), Dtype(0),
       DLalpha_minus_u.mutable_cpu_data());
@@ -111,17 +112,82 @@ void CSCLayer<Dtype>::Forward_cpu(const vector<Blob<Dtype>*>& bottom,
     // multiplier update
     rho = (rho*admm_eta_ > admm_max_rho_) ? admm_max_rho_ : rho*admm_eta_;
   }
-  // aggregate alpha to become output
-  col2im_csc_cpu(alpha.cpu_data(), top[0]->shape(0), num_output_, top[0]->shape(2),
-    top[0]->shape(3), kernel_h_, kernel_w_, boundary_, top[0]->mutable_cpu_data());
+  // alpha is the output, simple do a copy
+  caffe_copy(top[0]->count(), alpha.cpu_data(), top[0]->mutable_cpu_data());
 }
 
 template <typename Dtype>
 void CSCLayer<Dtype>::Backward_cpu(const vector<Blob<Dtype>*>& top,
       const vector<bool>& propagate_down,
       const vector<Blob<Dtype>*>& bottom) {
-  NOT_IMPLEMENTED;
+  vector<int> DtD_shape(2);
+  DtD_shape[0] = num_output_;
+  DtD_shape[1] = num_output_;
+  Blob<Dtype> DtD(DtD_shape);
+  caffe_cpu_gemm(CblasTrans, CblasNoTrans, num_output_, num_output_,
+    bottom_patch_shape_[0], Dtype(1), this->blob_[0].cpu_data(),
+    this->blob[0].cpu_data(), Dtype(1), DtD.mutable_cpu_data());
+  SpBlob<Dtype> spbeta;
+  Blob<Dtype> beta(top_patch_shape_);
+  spbeta.CopyFrom(&spalpha_);
+  if (this->param_propagate_down_[0]) {
+    // compute beta
+    for (int i = 0; i < spalpha_.ncol(); ++i) {
+      const Dtype *rhs = spalphaha_.values_data() + spalpha_.pB_data()[i];
+      const int *index = spalpha_.rows_data() + spalpha_.pB_data()[i];
+      int nnz = spalpha_.pE_data()[i] - spalpha_.pB_data()[i];
+      Dtype *lhs = spbeta.mutable_values_data() + spalpha_.pB_data()[i];
+      csc_local_inverse_naive(num_output_, lambda2_, DtD.mutable_cpu_data(),
+        rhs, index, nnz, lhs);
+    }
+    spbeta.ToFull(&beta);
+    // compute derivative: first part
+    Dtype *dict_diff = this->blob_[0].mutable_cpu_diff();
+    caffe_set(this->blob_[0].count(), 0, blob_diff);
+    Blob<Dtype> residual(bottom_patch_shape_);
+    Blob<Dtype> bottom_recon(bottom[0]->shape());
+    caffe_cpu_gemm(CblasNoTrans, CblasNoTrans, bottom_patch_shape_[0],
+      bottom_patch_shape_[1], num_output_, Dtype(1), this->blob_[0].cpu_data(),
+      top[0]->cpu_data(), Dtype(1), residual.mutable_cpu_data());
+    col2im_csc_cpu(residual.cpu_data(), bottom_recon.shape(0), bottom_recon.shape(1),
+      bottom_recon.shape(2), bottom_recon.shape(3), kernel_h_, kernel_w_, boundary_,
+      bottom_recon.mutable_cpu_data());
+    caffe_sub(bottom_recon.count(), bottom[0]->cpu_data(), bottom_recon.cpu_data(),
+      bottom_recon.mutable_cpu_data());
+    im2col_csc_cpu(bottom_recon.cpu_data(), bottom_recon.shape(0), bottom_recon.shape(1),
+      bottom_recon.shape(2), bottom_recon.shape(3), kernel_h_, kernel_w_, boundary_,
+      residual.mutable_cpu_data());
+    caffe_cpu_gemm(CblasNoTrans, CblasTrans, this->blob_[0].shape(0), this->blob_[0].shape(1),
+      residual.shape(1), Dtype(1), residual.cpu_data(), beta.cpu_data(), Dtype(1), dict_diff);
+    // compute derivative: second part
+    Blob<Dtype> &Dlxbeta = residual;
+    Blob<Dtype> &beta_recon = bottom_recon;
+    Blob<Dtype> dict_buffer(this->blob_[0].shape());
+    caffe_cpu_gemm(CblasNoTrans, CblasNoTrans, bottom_patch_shape_[0],
+      bottom_patch_shape_[1], num_output_, Dtype(1), this->blob_[0].cpu_data(),
+      beta.cpu_data(), Dlxbeta.mutable_cpu_data());
+    col2im_csc_cpu(Dlxbeta.cpu_data(), beta_recon.shape(0), beta_recon.shape(1),
+      beta_recon.shape(2), beta_recon.shape(3), kernel_h_, kernel_w_, boundary_,
+      beta_recon.mutable_cpu_data());
+    im2col_csc_cpu(beta_recon.cpu_data(), beta_recon.shape(0), beta_recon.shape(1),
+      beta_recon.shape(2), beta_recon.shape(3), kernel_h_, kernel_w_, boundary_,
+      Dlxbeta.mutable_cpu_data());
+    caffe_cpu_gemm(CblasNoTrans, CblasTrans, dict_buffer.shape(0), dict_buffer.shape(1),
+      Dlxbeta.shape(1), Dtype(1), Dlxbeta.cpu_data(), top[0]->cpu_data(), Dtype(1),
+      dict_buffer.mutable_cpu_data());
+    caffe_sub(this->blob_[0].count(), dict_diff, dict_buff.cpu_data(), dict_diff());
+    caffe_scal(this->blob_[0].count(), Dtype(1./bottom[0].shape(0)), dict_diff());
+  }
+  if (propagate_down[0]) {
+    NOT_IMPLEMENTED;
+  }
 }
 
+#ifdef CPU_ONLY
+STUB_GPU(CSCLayer);
+#endif
+
+INSTANTIATE_CLASS(CSCLayer);
+REGISTER_LAYER_CLASS(CSC);
 
 } // namespace caffe

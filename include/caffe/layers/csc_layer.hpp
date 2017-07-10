@@ -16,6 +16,7 @@
 #include "caffe/blob.hpp"
 #include "caffe/layer.hpp"
 #include "caffe/proto/caffe.pb.h"
+#include "caffe/util/csc_helpers.hpp"
 
 namespace caffe {
 
@@ -60,6 +61,7 @@ class CSCLayer : public Layer<Dtype> {
 
   vector<int> bottom_patch_shape_;
   vector<int> top_patch_shape_;
+  SpBlob<Dtype> spalpha_;
 
 };
 

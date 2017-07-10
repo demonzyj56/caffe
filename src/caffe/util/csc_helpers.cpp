@@ -8,11 +8,114 @@
 
 namespace caffe {
 
+template <typename Dtype>
+void SpBlob<Dtype>::Reshape(int nnz0, int nrow0, int ncol0) {
+  nnz_ = nnz0;
+  nrow_ = nrow0;
+  if (nnz0 > capacity_) {
+    capacity_ = nnz0;
+    values_.reset(new SyncedMemory(capacity_ * sizeof(Dtype)));
+    rows_.reset(new SyncedMemory(capacity_ * sizeof(int)));
+  }
+  if (ncol_ != ncol0) {
+    ncol_ = ncol0;
+    pB_.reset(new SyncedMemory((ncol_+1) * sizeof(int)));
+  }
+}
+
+template <typename Dtype>
+SpBlob<Dtype>::SpBlob(int nnz0, int nrow0, int ncol0)
+  : capacity_(0) {
+  Reshape(nnz0, nrow0, ncol0);
+}
+
+template <typename Dtype>
+SpBlob<Dtype>::CopyFrom(const Dtype *values, const int *rows, const int *pB, const int *pE) {
+  CHECK(values);
+  CHECK(rows);
+  CHECK(pB);
+  CHECK(pE);
+  CHECK(nnz_ <= capacity_);
+  // Make sure capacity_ and SyncedMemory is the same
+  if (values_->size() != capacity_ * sizeof(Dtype)) {
+    values_.reset(new SyncedMemory(capacity_ * sizeof(Dtype)));
+  }
+  if (rows_->size() != capacity_ * sizeof(int)) {
+    rows_.reset(new SyncedMemory(capacity_ * sizeof(int)));
+  }
+  if (pB_->size() != (ncol_ + 1) * sizeof(int)) {
+    pB_.reset(new SyncedMemory((ncol_+1) * sizeof(int)));
+  }
+  caffe_copy(nnz_, values, reinterpret_cast<Dtype *>(values_->mutable_cpu_data()));
+  caffe_copy(nnz_, rows, reinterpret_cast<int *>(rows_->mutable_cpu_data()));
+  caffe_copy(ncol_, pB, reinterpret_cast<int *>(pB_->mutable_cpu_data()));
+  mutable_pB_data()[ncol_] = pE[ncol_-1];
+}
+
+template <typename Dtype>
+void SpBlob<Dtype>::CopyFrom(const SpBlob *other) {
+  Reshape(other->nnz(), other->nrow(), other->ncol());
+  CopyFrom(other->values_data(), other->rows_data(), other->pB_data(), other->pE_data());
+}
+
+// Note that SpBlob is CSC format (column major) and Blob is row major.
+template <typename Dtype>
+void SpBlob<Dtype>::ToFull(Blob<Dtype> *full) {
+  vector<int> fullshape(2);
+  fullshape[0] = nrow_;
+  fullshape[1] = ncol_;
+  full->Reshape(fullshape);
+  caffe_set(full->count(), Dtype(0), full.mutable_cpu_data());
+  for (int c = 0; c < ncol_; ++i) {
+    for (int row_ctr = pB_data()[c]; row_ctr != pE_data()[c]; ++row_ctr) {
+      int r = mutable_rows_data()[row_ctr];
+      Dtype val = mutable_values_data()[row_ctr];
+      full->mutable_cpu_data()[r*ncol_+c] = val;
+    }
+  }
+}
+
+template <typename Dtype>
+const Dtype *SpBlob<Dtype>::values_data() const {
+  CHECK(values_);
+  return reinterpret_cast<const Dtype *>(values_->cpu_data());
+}
+
+template <typename Dtype>
+Dtype *SpBlob<Dtype>::mutable_values_data() {
+  CHECK(values_);
+  return reinterpret_cast<Dtype *>(values_->mutable_cpu_data());
+}
+
+template <typename Dtype>
+const int *SpBlob<Dtype>::rows_data() const {
+  CHECK(rows_);
+  return reinterpret_cast<const int *>(rows_->cpu_data());
+}
+
+template <typename Dtype>
+int *SpBlob<Dtype>::mutable_rows_data() {
+  CHECK(rows_);
+  return reinterpret_cast<int *>(rows_->mutable_cpu_data());
+}
+
+template <typename Dtype>
+const int *SpBlob<Dtype>::pB_data() const {
+  CHECK(pB_);
+  return reinterpret_cast<const int *>(pB_->cpu_data());
+}
+
+template <typename Dtype>
+int *SpBlob<Dtype>::mutable_pB_data() {
+  CHECK(pB_);
+  return reinterpret_cast<int *>(pB_->mutable_cpu_data());
+}
+
 // Note that caffe::Blob is row major (inrease last) while Matrix in spams is col major
 // (increase first). We use a workaround for this problem:
 template <typename Dtype>
 void lasso_cpu(const Blob<Dtype> *X, const Blob<Dtype> *D, Dtype lambda1, Dtype lambda2,
-      int L, Blob<Dtype> *alpha) {
+      int L, Blob<Dtype> *alpha, SpBlob<Dtype> *spalpha) {
   CHECK_EQ(X->num_axes(), 2) << "Only 2D blob is allowed.";
   CHECK_EQ(D->num_axes(), 2) << "Only 2D blob is allowed.";
   CHECK_EQ(alpha->num_axes(), 2) << "Only 2D blob is allowed.";
@@ -33,6 +136,8 @@ void lasso_cpu(const Blob<Dtype> *X, const Blob<Dtype> *D, Dtype lambda1, Dtype 
     LOG(FATAL) << err;
   }
   alpha_spmat->toFullTrans(alpha_mat);
+  spalpha->Reshape(alpha_spmat->nnz(), alpha_spmat->n(), alpha_spmat->m());
+  spalpha->CopyFrom(alpha_spmat->v(), alpha_spmat->r(), alpha_spmat->pB(), alpha_spamt->pE());
   delete alpha_spmat;
   caffe_copy(alpha->count(), alpha_spmat.X(), alpha->mutable_cpu_data());
 }
@@ -229,10 +334,11 @@ void csc_local_inverse_naive(const int m, const float lambda2, const float *DtD,
 		DtD_shrunk[i*nnz + j] += lambda2;
 	  }
 	}
+    // beta[i] = l[index[i]];
   }
+  caffe_copy(nnz, l, beta);
   int info = LAPACKE_spotrf(LAPACK_ROW_MAJOR, 'L', nnz, DtD_shrunk.data(), nnz);
   CHECK_EQ(info, 0) << "Cholesky factorization is not successful!";
-  caffe_copy(nnz, l, beta);
   info = LAPACKE_spotrs(LAPACK_ROW_MAJOR, 'L', nnz, nnz, DtD_shrunk.data(), beta, nnz, nnz);
   CHECK_EQ(info, 0) << "Solving linear system is not successful!";
 }
@@ -248,10 +354,11 @@ void csc_local_inverse_naive(const int m, const double lambda2, const double *Dt
 		DtD_shrunk[i*nnz + j] += lambda2;
 	  }
 	}
+    // beta[i] = l[index[i]];
   }
+  caffe_copy(nnz, l, beta);
   int info = LAPACKE_dpotrf(LAPACK_ROW_MAJOR, 'L', nnz, DtD_shrunk.data(), nnz);
   CHECK_EQ(info, 0) << "Cholesky factorization is not successful!";
-  caffe_copy(nnz, l, beta);
   info = LAPACKE_dpotrs(LAPACK_ROW_MAJOR, 'L', nnz, nnz, DtD_shrunk.data(), beta, nnz, nnz);
   CHECK_EQ(info, 0) << "Solving linear system is not successful!";
 }

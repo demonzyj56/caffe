@@ -3,10 +3,47 @@
 /*
  * Utils for csc layer.
  */
+#include "caffe/common.hpp"
+#include "caffe/syncedmem.hpp"
 #include "caffe/blob.hpp"
 #include "caffe/proto/caffe.pb.h"
 
 namespace caffe {
+
+// A simple data structure holding sparse matrix following CSC format.
+template <typename Dtype>
+class SpBlob {
+ public:
+  SpBlob()
+      : values_(), rows_(), pB_(), nnz_(0), capacity_(0), nrow_(0), ncol_(0) {}
+  explicit SpBlob(int nnz0, int nrow0, int ncol0);
+
+  void Reshape(int nnz0, int nrow0, int ncol0);
+  void CopyFrom(const SpBlob& other);
+  void CopyFrom(const Dtype *values, const int *rows, const int *pB, const int *pE);
+  void ToFull(Blob<Dtype> *full);
+
+  const Dtype *values_data() const;
+  const int *rows_data() const;
+  const int *pB_data() const;
+  const int *pE_data() const { return pB_data() + 1; }
+  Dtype *mutable_values_data();
+  int *mutable_rows_data();
+  int *mutable_pB_data();
+  int *mutable_pE_data() { return mutable_pB_data() + 1; }
+  int nnz() const { return nnz_; }
+  int nrow() const { return nrow_; }
+  int ncol() const { return ncol_; }
+ private:
+  shared_ptr<SyncedMemory> values_;
+  shared_ptr<SyncedMemory> rows_;
+  shared_ptr<SyncedMemory> pB_;
+  int nnz_;
+  int capacity_;
+  int nrow_;
+  int ncol_;
+  DISABLE_COPY_AND_ASSIGN(SpBlob);
+};
 
 
 // An implementation of LASSO on CPU using SPAMS toolbox.
@@ -15,9 +52,10 @@ namespace caffe {
 // alpha is p-by-N.
 // L specify the maximum steps of the homotopy algorithm, which could be used as 
 // a stopping criteria.
+// spalpha stores a sparse version of alpha.
 template <typename Dtype>
 void lasso_cpu(const Blob<Dtype> *X, const Blob<Dtype> *D, Dtype lambda1, Dtype lambda2,
-    int L, Blob<Dtype> *alpha);
+    int L, Blob<Dtype> *alpha, SpBlob<Dtype> *spalpha);
 
 // Utility function for transposing a matrix inplace or out of place.
 // This routine is supported by OpenBLAS and MKL.
@@ -46,13 +84,13 @@ void col2im_csc_gpu(const Dtype *patches, const int nsamples, const int channels
     const CSCParameter::Boundary boundary, Dtype *blob);
 
 // Utility function for solving the following problem:
-// (DtD + lambda2*I)beta = l.
+// (DtD + lambda2*I)beta = rhs.
 // Here DtD is truncated such that only entries in `index` is not zero.
-// l, index and beta all have length of nnz.
+// rhs, index and beta all have length of nnz.
 // WARNING: very naive implementation!
 template <typename Dtype>
 void csc_local_inverse_naive(const int m, const Dtype lambda2, const Dtype *DtD,
-    const Dtype *l, const int *index, const int nnz, Dtype *beta);
+    const Dtype *rhs, const int *index, const int nnz, Dtype *beta);
 
 } // namespace caffe
 
