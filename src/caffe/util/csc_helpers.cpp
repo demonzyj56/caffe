@@ -111,6 +111,20 @@ int *SpBlob<Dtype>::mutable_pB_data() {
   return reinterpret_cast<int *>(pB_->mutable_cpu_data());
 }
 
+// data accessor
+template <typename Dtype>
+const Dtype SpBlob<Dtype>::at(int r, int c) const {
+  CHECK(r < nrow_ && c < ncol_);
+  Dtype val = 0.;
+  for (int ind = pB_data()[c]; ind != pE_data()[c]; ++ind) {
+    if (rows_data()[ind] == r) {
+      val = values_data()[ind];
+      break;
+    }
+  }
+  return val;
+}
+
 // Note that caffe::Blob is row major (inrease last) while Matrix in spams is col major
 // (increase first). We use a workaround for this problem:
 template <typename Dtype>
@@ -138,8 +152,8 @@ void lasso_cpu(const Blob<Dtype> *X, const Blob<Dtype> *D, Dtype lambda1, Dtype 
   alpha_spmat->toFullTrans(alpha_mat);
   spalpha->Reshape(alpha_spmat->nnz(), alpha_spmat->n(), alpha_spmat->m());
   spalpha->CopyFrom(alpha_spmat->v(), alpha_spmat->r(), alpha_spmat->pB(), alpha_spamt->pE());
-  delete alpha_spmat;
   caffe_copy(alpha->count(), alpha_spmat.X(), alpha->mutable_cpu_data());
+  delete alpha_spmat;
 }
 
 template <>

@@ -11,6 +11,10 @@
 namespace caffe {
 
 // A simple data structure holding sparse matrix following CSC format.
+// Notice that different from Blob<Dtype>, SpBlob<Dtype> is column major,
+// which follows the Compressive Sensing Column (CSC) format.
+// We don't put any data accessor here because this class for csc_layer
+// mainly serves as a data storage for backward use.
 template <typename Dtype>
 class SpBlob {
  public:
@@ -34,6 +38,7 @@ class SpBlob {
   int nnz() const { return nnz_; }
   int nrow() const { return nrow_; }
   int ncol() const { return ncol_; }
+  const Dtype at(int r, int c) const;
  private:
   shared_ptr<SyncedMemory> values_;
   shared_ptr<SyncedMemory> rows_;
@@ -60,9 +65,9 @@ void lasso_cpu(const Blob<Dtype> *X, const Blob<Dtype> *D, Dtype lambda1, Dtype 
 // Utility function for transposing a matrix inplace or out of place.
 // This routine is supported by OpenBLAS and MKL.
 // Valid Dtype is 'float' and 'double'.
-template <Dtype>
+template <typename Dtype>
 void caffe_cpu_imatcopy(const int rows, const int cols, Dtype *X);
-template <Dtype>
+template <typename Dtype>
 void caffe_cpu_omatcopy(const int M, const int N, const Dtype *X, Dtype *Y);
 
 // im2col/col2im dispatch function, supporting circulant boundary.
