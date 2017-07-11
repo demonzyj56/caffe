@@ -6,6 +6,11 @@
 #include "caffe/util/csc_helpers.hpp"
 #include "spams/cpp_library/cppspams.h"
 
+#ifdef USE_MKL
+#include <mkl_trans.h>
+#include <mkl_lapacke.h>
+#endif
+
 namespace caffe {
 
 template <typename Dtype>
@@ -30,7 +35,7 @@ SpBlob<Dtype>::SpBlob(int nnz0, int nrow0, int ncol0)
 }
 
 template <typename Dtype>
-SpBlob<Dtype>::CopyFrom(const Dtype *values, const int *rows, const int *pB, const int *pE) {
+void SpBlob<Dtype>::CopyFrom(const Dtype *values, const int *rows, const int *pB, const int *pE) {
   CHECK(values);
   CHECK(rows);
   CHECK(pB);
@@ -66,7 +71,7 @@ void SpBlob<Dtype>::ToFull(Blob<Dtype> *full) {
   fullshape[1] = ncol_;
   full->Reshape(fullshape);
   caffe_set(full->count(), Dtype(0), full.mutable_cpu_data());
-  for (int c = 0; c < ncol_; ++i) {
+  for (int c = 0; c < ncol_; ++c) {
     for (int row_ctr = pB_data()[c]; row_ctr != pE_data()[c]; ++row_ctr) {
       int r = mutable_rows_data()[row_ctr];
       Dtype val = mutable_values_data()[row_ctr];
@@ -144,14 +149,16 @@ void lasso_cpu(const Blob<Dtype> *X, const Blob<Dtype> *D, Dtype lambda1, Dtype 
   Matrix<Dtype> D_mat(reinterpret_cast<Dtype *>(D_trans_mem.mutable_cpu_data()),
     D->shape(0), D->shape(1));
   Matrix<Dtype> alpha_mat;
+  SpMatrix<Dtype> *alpha_spmat = NULL;
   try {
-    SpMatrix<Dtype> *alpha_spmat = cppLasso(&X_mat, &D_mat, NULL, false, L, lambda1, lambda2);
+    alpha_spmat = cppLasso(&X_mat, &D_mat, NULL, false, L, lambda1, lambda2);
   } catch (const char *err) {
     LOG(FATAL) << err;
   }
+  CHECK(alpha_spmat);
   alpha_spmat->toFullTrans(alpha_mat);
   spalpha->Reshape(alpha_spmat->nnz(), alpha_spmat->n(), alpha_spmat->m());
-  spalpha->CopyFrom(alpha_spmat->v(), alpha_spmat->r(), alpha_spmat->pB(), alpha_spamt->pE());
+  spalpha->CopyFrom(alpha_spmat->v(), alpha_spmat->r(), alpha_spmat->pB(), alpha_spmat->pE());
   caffe_copy(alpha->count(), alpha_spmat.X(), alpha->mutable_cpu_data());
   delete alpha_spmat;
 }
@@ -191,62 +198,68 @@ void caffe_cpu_omatcopy<double>(const int rows, const int cols, const double *X,
   int lda = cols;
   int ldb = rows;
 #ifdef USE_MKL
-  mkl_somatcopy('r', 't', rows, cols, float(1), X, lda, Y, ldb);
+  mkl_domatcopy('r', 't', rows, cols, double(1), X, lda, Y, ldb);
 #else
-  cblas_somatcopy(CblasRowMajor, CblasTrans, rows, cols, float(1), X, lda, Y, ldb);
+  cblas_domatcopy(CblasRowMajor, CblasTrans, rows, cols, double(1), X, lda, Y, ldb);
 #endif
 }
 
 template <typename Dtype>
-void im2col_cpu_circulant(const Dtype *blob, const int nsamples, const int channels,
+void im2col_cpu_circulant(const Dtype *blob, const int channels,
     const int height, const int width, const int kernel_h, const int kernel_w,
     const int pad_h, const int pad_w, Dtype *patches) {
 	const int output_h = height;
 	const int output_w = width;
 	const int channel_size = height * width;
 	// outer loop over rows of patches
-	for (int n = nsamples; n; --n)
-		for (int c = channels; c--; blob += channel_size) {
-			for (int kernel_row = 0; kernel_row < kernel_h; ++kernel_row) {
-				for (int kernel_col = 0; kernel_col < kernel_w; ++kernel_col) {
-					// inner loop over cols of patches
-					int input_row = (kernel_row - pad_h + height) % height;
-					for (int output_rows = output_h; output_rows; output_rows--) {
-						int input_col = (kernel_col - pad_w + width) % width;
-						for (int output_cols = output_w; output_cols; output_cols--) {
-							*(patches++) = blob[input_row * width + input_col];
-							input_col = (input_col + 1) % width;
-						}
-						input_row = (input_row + 1) % height;
+	// for (int n = nsamples; n; --n)
+    #ifdef _OPENMP
+    #pragma omp parallel for
+    #endif
+	for (int c = channels; c--; blob += channel_size) {
+		for (int kernel_row = 0; kernel_row < kernel_h; ++kernel_row) {
+			for (int kernel_col = 0; kernel_col < kernel_w; ++kernel_col) {
+				// inner loop over cols of patches
+				int input_row = (kernel_row - pad_h + height) % height;
+				for (int output_rows = output_h; output_rows; output_rows--) {
+					int input_col = (kernel_col - pad_w + width) % width;
+					for (int output_cols = output_w; output_cols; output_cols--) {
+						*(patches++) = blob[input_row * width + input_col];
+						input_col = (input_col + 1) % width;
 					}
+					input_row = (input_row + 1) % height;
 				}
 			}
 		}
+	}
 }
 
 template <typename DType>
-void col2im_cpu_circulant(const DType *patches, const int nsamples, const int channels,
+void col2im_cpu_circulant(const DType *patches, const int channels,
 	const int height, const int width, const int kernel_h, const int kernel_w,
 	const int pad_h, const int pad_w, DType *blob) {
 	const int output_h = height;
 	const int output_w = width;
 	const int channel_size = height * width;
-	for (int n = nsamples; n; --n)
-		for (int c = channels; c--; blob += channel_size) {
-			for (int kernel_row = 0; kernel_row < kernel_h; ++kernel_row) {
-				for (int kernel_col = 0; kernel_col < kernel_w; ++kernel_col) {
-					int input_row = (kernel_row - pad_h + height) % height;
-					for (int output_rows = output_h; output_rows; output_rows--) {
-						int input_col = (kernel_col - pad_w + width) % width;
-						for (int output_cols = output_w; output_cols; output_cols--) {
-							blob[input_row * width + input_col] += *(patches++);
-							input_col = (input_col + 1) % width;
-						}
-						input_row = (input_row + 1) % height;
+	// for (int n = nsamples; n; --n)
+    #ifdef _OPENMP
+    #pragma omp parallel for
+    #endif
+	for (int c = channels; c--; blob += channel_size) {
+		for (int kernel_row = 0; kernel_row < kernel_h; ++kernel_row) {
+			for (int kernel_col = 0; kernel_col < kernel_w; ++kernel_col) {
+				int input_row = (kernel_row - pad_h + height) % height;
+				for (int output_rows = output_h; output_rows; output_rows--) {
+					int input_col = (kernel_col - pad_w + width) % width;
+					for (int output_cols = output_w; output_cols; output_cols--) {
+						blob[input_row * width + input_col] += *(patches++);
+						input_col = (input_col + 1) % width;
 					}
+					input_row = (input_row + 1) % height;
 				}
 			}
 		}
+	}
 }
 
 
@@ -256,12 +269,12 @@ void im2col_csc_cpu(const Dtype *blob, const int nsamples, const int channels,
       CSCParameter::Boundary boundary, Dtype *patches) {
   int pad_h = 0;
   int pad_w = 0;
-  int output_h = height;
-  int output_w = width;
+  // int output_h = height;
+  // int output_w = width;
   switch(boundary) {
     case CSCParameter::NOPAD:
-      output_h = height - kernel_h + 1;
-      output_w = width - kernel_w + 1;
+      // output_h = height - kernel_h + 1;
+      // output_w = width - kernel_w + 1;
       break;
     case CSCParameter::PAD_FRONT:
     case CSCParameter::CIRCULANT_FRONT:
@@ -276,10 +289,10 @@ void im2col_csc_cpu(const Dtype *blob, const int nsamples, const int channels,
     case CSCParameter::CIRCULANT_BACK:
       break;
     default:
-      LOG(FATAL) << "Unknown CSC boundary type."
+      LOG(FATAL) << "Unknown CSC boundary type.";
   }
   if (boundary == CSCParameter::CIRCULANT_BACK || boundary == CSCParameter::CIRCULANT_FRONT) {
-    im2col_cpu_circulant(blob, nsamples, channels, height, width, kernel_h, kernel_w,
+    im2col_cpu_circulant(blob, nsamples*channels, height, width, kernel_h, kernel_w,
       pad_h, pad_w, patches);
   } else {
     im2col_cpu(blob, nsamples*channels, height, width, kernel_h, kernel_w,
@@ -299,12 +312,12 @@ void col2im_csc_cpu(const Dtype *patches, const int nsamples, const int channels
       CSCParameter::Boundary boundary, Dtype *blob) {
   int pad_h = 0;
   int pad_w = 0;
-  int output_h = height;
-  int output_w = width;
+  // int output_h = height;
+  // int output_w = width;
   switch(boundary) {
     case CSCParameter::NOPAD:
-      output_h = height - kernel_h + 1;
-      output_w = width - kernel_w + 1;
+      // output_h = height - kernel_h + 1;
+      // output_w = width - kernel_w + 1;
       break;
     case CSCParameter::PAD_FRONT:
     case CSCParameter::CIRCULANT_FRONT:
@@ -319,10 +332,10 @@ void col2im_csc_cpu(const Dtype *patches, const int nsamples, const int channels
     case CSCParameter::CIRCULANT_BACK:
       break;
     default:
-      LOG(FATAL) << "Unknown CSC boundary type."
+      LOG(FATAL) << "Unknown CSC boundary type.";
   }
   if (boundary == CSCParameter::CIRCULANT_BACK || boundary == CSCParameter::CIRCULANT_FRONT) {
-    col2im_cpu_circulant(patches, nsamples, channels, height, width, kernel_h, kernel_w,
+    col2im_cpu_circulant(patches, nsamples*channels, height, width, kernel_h, kernel_w,
       pad_h, pad_w, blob);
   } else {
     col2im_cpu(patches, nsamples*channels, height, width, kernel_h, kernel_w,
@@ -342,7 +355,7 @@ void csc_local_inverse_naive(const int m, const float lambda2, const float *DtD,
   if (nnz == 0) return;
   vector<float> DtD_shrunk(nnz*nnz);
   for (int i = 0; i < nnz; ++i) {
-	for (in j = 0; j < nnz; ++j) {
+	for (int j = 0; j < nnz; ++j) {
 	  DtD_shrunk[i*nnz + j] = DtD[index[i]*m + index[j]];
 	  if (j == i) {
 		DtD_shrunk[i*nnz + j] += lambda2;
@@ -353,7 +366,7 @@ void csc_local_inverse_naive(const int m, const float lambda2, const float *DtD,
   caffe_copy(nnz, l, beta);
   int info = LAPACKE_spotrf(LAPACK_ROW_MAJOR, 'L', nnz, DtD_shrunk.data(), nnz);
   CHECK_EQ(info, 0) << "Cholesky factorization is not successful!";
-  info = LAPACKE_spotrs(LAPACK_ROW_MAJOR, 'L', nnz, nnz, DtD_shrunk.data(), beta, nnz, nnz);
+  info = LAPACKE_spotrs(LAPACK_ROW_MAJOR, 'L', nnz, nnz, DtD_shrunk.data(), nnz, beta, nnz);
   CHECK_EQ(info, 0) << "Solving linear system is not successful!";
 }
 template <>
@@ -362,7 +375,7 @@ void csc_local_inverse_naive(const int m, const double lambda2, const double *Dt
   if (nnz == 0) return;
   vector<double> DtD_shrunk(nnz*nnz);
   for (int i = 0; i < nnz; ++i) {
-	for (in j = 0; j < nnz; ++j) {
+	for (int j = 0; j < nnz; ++j) {
 	  DtD_shrunk[i*nnz + j] = DtD[index[i]*m + index[j]];
 	  if (j == i) {
 		DtD_shrunk[i*nnz + j] += lambda2;
@@ -373,7 +386,7 @@ void csc_local_inverse_naive(const int m, const double lambda2, const double *Dt
   caffe_copy(nnz, l, beta);
   int info = LAPACKE_dpotrf(LAPACK_ROW_MAJOR, 'L', nnz, DtD_shrunk.data(), nnz);
   CHECK_EQ(info, 0) << "Cholesky factorization is not successful!";
-  info = LAPACKE_dpotrs(LAPACK_ROW_MAJOR, 'L', nnz, nnz, DtD_shrunk.data(), beta, nnz, nnz);
+  info = LAPACKE_dpotrs(LAPACK_ROW_MAJOR, 'L', nnz, nnz, DtD_shrunk.data(), nnz, beta, nnz);
   CHECK_EQ(info, 0) << "Solving linear system is not successful!";
 }
 
