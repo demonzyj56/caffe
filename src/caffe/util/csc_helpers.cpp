@@ -2,7 +2,7 @@
 #include "caffe/common.hpp"
 #include "caffe/blob.hpp"
 #include "caffe/util/im2col.hpp"
-#include "caffe/util/mkl_alternate.hpp"
+#include "caffe/util/math_functions.hpp"
 #include "caffe/util/csc_helpers.hpp"
 #include "spams/cpp_library/cppspams.h"
 
