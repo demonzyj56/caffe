@@ -23,7 +23,7 @@ class SpBlob {
   explicit SpBlob(int nnz0, int nrow0, int ncol0);
 
   void Reshape(int nnz0, int nrow0, int ncol0);
-  void CopyFrom(const SpBlob& other);
+  void CopyFrom(const SpBlob* other);
   void CopyFrom(const Dtype *values, const int *rows, const int *pB, const int *pE);
   void ToFull(Blob<Dtype> *full);
 
