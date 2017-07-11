@@ -130,7 +130,7 @@ void CSCLayer<Dtype>::Backward_cpu(const vector<Blob<Dtype>*>& top,
     this->blobs_[0]->cpu_data(), Dtype(1), DtD.mutable_cpu_data());
   SpBlob<Dtype> spbeta;
   Blob<Dtype> beta(top_patch_shape_);
-  spbeta.CopyFrom(spalpha_);
+  spbeta.CopyFrom(&spalpha_);
   if (this->param_propagate_down_[0]) {
     // compute beta
     for (int i = 0; i < spalpha_.ncol(); ++i) {
