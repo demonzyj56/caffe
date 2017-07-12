@@ -204,63 +204,126 @@ void caffe_cpu_omatcopy<double>(const int rows, const int cols, const double *X,
 #endif
 }
 
+// template <typename Dtype>
+// void im2col_cpu_circulant(const Dtype *blob, const int channels,
+//     const int height, const int width, const int kernel_h, const int kernel_w,
+//     const int pad_h, const int pad_w, Dtype *patches) {
+//     const int output_h = height;
+//     const int output_w = width;
+//     const int channel_size = height * width;
+//     #ifdef _OPENMP
+//     #pragma omp parallel for
+//     #endif
+//     for (int c = channels; c--; blob += channel_size) {
+//         for (int kernel_row = 0; kernel_row < kernel_h; ++kernel_row) {
+//             for (int kernel_col = 0; kernel_col < kernel_w; ++kernel_col) {
+//                 // inner loop over cols of patches
+//                 int input_row = (kernel_row - pad_h + height) % height;
+//                 for (int output_rows = output_h; output_rows; output_rows--) {
+//                     int input_col = (kernel_col - pad_w + width) % width;
+//                     for (int output_cols = output_w; output_cols; output_cols--) {
+//                         *(patches++) = blob[input_row * width + input_col];
+//                         input_col = (input_col + 1) % width;
+//                     }
+//                     input_row = (input_row + 1) % height;
+//                 }
+//             }
+//         }
+//     }
+// }
 template <typename Dtype>
 void im2col_cpu_circulant(const Dtype *blob, const int channels,
+      const int height, const int width, const int kernel_h, const int kernel_w,
+      const int pad_h, const int pad_w, Dtype *patches) {
+  const int patch_height = channels * kernel_h * kernel_w;
+  const int patch_width = height * width;
+  #ifdef _OPENMP
+  #pragma omp parallel for
+  #endif
+  for (int rows = 0; rows < patch_height; ++rows) {
+    int h_index = rows / kernel_w;
+    int w_offset = rows % kernel_w;
+    int h_offset = h_index % kernel_h;
+    int c_im = h_index / kernel_h;
+    const Dtype *blob_local = blob + c_im * patch_width;
+    Dtype *patch_local = patches + rows * patch_width;
+    for (int h = 0; h < height; ++h) {
+      int h_im = (h + h_offset - pad_h + height) % height;
+      for (int w = 0; w < width; ++w) {
+          int w_im = (w + w_offset - pad_w + width) % width;
+          patch_local[h*width+w] = blob_local[h_im * width + w_im];
+      }
+    }
+  }
+}
+template void im2col_cpu_circulant<float>(const float *blob, const int channels,
     const int height, const int width, const int kernel_h, const int kernel_w,
-    const int pad_h, const int pad_w, Dtype *patches) {
-	const int output_h = height;
-	const int output_w = width;
-	const int channel_size = height * width;
-	// outer loop over rows of patches
-	// for (int n = nsamples; n; --n)
-    #ifdef _OPENMP
-    #pragma omp parallel for
-    #endif
-	for (int c = channels; c--; blob += channel_size) {
-		for (int kernel_row = 0; kernel_row < kernel_h; ++kernel_row) {
-			for (int kernel_col = 0; kernel_col < kernel_w; ++kernel_col) {
-				// inner loop over cols of patches
-				int input_row = (kernel_row - pad_h + height) % height;
-				for (int output_rows = output_h; output_rows; output_rows--) {
-					int input_col = (kernel_col - pad_w + width) % width;
-					for (int output_cols = output_w; output_cols; output_cols--) {
-						*(patches++) = blob[input_row * width + input_col];
-						input_col = (input_col + 1) % width;
-					}
-					input_row = (input_row + 1) % height;
-				}
-			}
-		}
-	}
-}
+    const int pad_h, const int pad_w, float *patches);
+template void im2col_cpu_circulant<double>(const double *blob, const int channels,
+    const int height, const int width, const int kernel_h, const int kernel_w,
+    const int pad_h, const int pad_w, double *patches);
 
-template <typename DType>
-void col2im_cpu_circulant(const DType *patches, const int channels,
+// template <typename DType>
+// void col2im_cpu_circulant(const DType *patches, const int channels,
+//     const int height, const int width, const int kernel_h, const int kernel_w,
+//     const int pad_h, const int pad_w, DType *blob) {
+//     const int output_h = height;
+//     const int output_w = width;
+//     const int channel_size = height * width;
+//     // for (int n = nsamples; n; --n)
+//     #ifdef _OPENMP
+//     #pragma omp parallel for
+//     #endif
+//     for (int c = channels; c--; blob += channel_size) {
+//         for (int kernel_row = 0; kernel_row < kernel_h; ++kernel_row) {
+//             for (int kernel_col = 0; kernel_col < kernel_w; ++kernel_col) {
+//                 int input_row = (kernel_row - pad_h + height) % height;
+//                 for (int output_rows = output_h; output_rows; output_rows--) {
+//                     int input_col = (kernel_col - pad_w + width) % width;
+//                     for (int output_cols = output_w; output_cols; output_cols--) {
+//                         blob[input_row * width + input_col] += *(patches++);
+//                         input_col = (input_col + 1) % width;
+//                     }
+//                     input_row = (input_row + 1) % height;
+//                 }
+//             }
+//         }
+//     }
+// }
+template <typename Dtype>
+void col2im_cpu_circulant(const Dtype *patches, const int channels,
 	const int height, const int width, const int kernel_h, const int kernel_w,
-	const int pad_h, const int pad_w, DType *blob) {
-	const int output_h = height;
-	const int output_w = width;
-	const int channel_size = height * width;
-	// for (int n = nsamples; n; --n)
-    #ifdef _OPENMP
-    #pragma omp parallel for
-    #endif
-	for (int c = channels; c--; blob += channel_size) {
-		for (int kernel_row = 0; kernel_row < kernel_h; ++kernel_row) {
-			for (int kernel_col = 0; kernel_col < kernel_w; ++kernel_col) {
-				int input_row = (kernel_row - pad_h + height) % height;
-				for (int output_rows = output_h; output_rows; output_rows--) {
-					int input_col = (kernel_col - pad_w + width) % width;
-					for (int output_cols = output_w; output_cols; output_cols--) {
-						blob[input_row * width + input_col] += *(patches++);
-						input_col = (input_col + 1) % width;
-					}
-					input_row = (input_row + 1) % height;
-				}
-			}
-		}
-	}
+	const int pad_h, const int pad_w, Dtype *blob) {
+  caffe_set(channels * height * with, Dtype(0), blob);
+  const int chunk_size = kernel_h * kernel_w * height * width;
+  // parallel over channels
+  #ifdef _OPENMP
+  #pragma omp parallel for if (channels > 1)
+  #endif
+  for (int c = 0; c < channels; ++c) {
+    const Dtype *patch_local = patches + c * chunk_size;
+    Dtype *blob_local = blob + c * height * width;
+    for (int kernel_row = 0; kernel_row < kernel_h; ++kernel_row) {
+      for (int kernel_col = 0; kernel_col < kernel_w; ++kernel_col) {
+        int input_row = (kernel_row - pad_h + height) % height;
+        for (int output_rows = 0; output_rows < height; ++output_rows) {
+          int input_col = (kernel_col - pad_w + width) % width;
+          for (int output_cols = 0; output_cols < width; ++output_cols) {
+            blob_local[input_row * width + input_col] += *(patch_local++);
+            input_col = (input_col + 1) % width;
+          }
+          input_row = (input_row + 1) % height;
+        }
+      }
+    }
+  }
 }
+template void col2im_cpu_circulant<float>(const float *patches, const int channels,
+	const int height, const int width, const int kernel_h, const int kernel_w,
+	const int pad_h, const int pad_w, float *blob);
+template void col2im_cpu_circulant<double>(const double *patches, const int channels,
+	const int height, const int width, const int kernel_h, const int kernel_w,
+	const int pad_h, const int pad_w, double *blob);
 
 
 template <typename Dtype>

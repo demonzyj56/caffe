@@ -72,19 +72,19 @@ void caffe_cpu_omatcopy(const int M, const int N, const Dtype *X, Dtype *Y);
 
 // im2col/col2im dispatch function, supporting circulant boundary.
 template <typename Dtype>
+void im2col_cpu_circulant(const Dtype *blob, const int channels,
+    const int height, const int width, const int kernel_h, const int kernel_w,
+    const int pad_h, const int pad_w, Dtype *patches);
+template <typename DType>
+void col2im_cpu_circulant(const DType *patches, const int channels,
+	const int height, const int width, const int kernel_h, const int kernel_w,
+	const int pad_h, const int pad_w, DType *blob);
+template <typename Dtype>
 void im2col_csc_cpu(const Dtype *blob, const int nsamples, const int channels,
     const int height, const int width, const int kernel_h, const int kernel_w,
     const CSCParameter::Boundary boundary, Dtype *patches);
 template <typename Dtype>
-void im2col_csc_gpu(const Dtype *blob, const int nsamples, const int channels,
-    const int height, const int width, const int kernel_h, const int kernel_w,
-    const CSCParameter::Boundary boundary, Dtype *patches);
-template <typename Dtype>
 void col2im_csc_cpu(const Dtype *patches, const int nsamples, const int channels,
-    const int height, const int width, const int kernel_h, const int kernel_w,
-    const CSCParameter::Boundary boundary, Dtype *blob);
-template <typename Dtype>
-void col2im_csc_gpu(const Dtype *patches, const int nsamples, const int channels,
     const int height, const int width, const int kernel_h, const int kernel_w,
     const CSCParameter::Boundary boundary, Dtype *blob);
 
