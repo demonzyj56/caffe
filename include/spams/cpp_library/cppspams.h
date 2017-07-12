@@ -118,7 +118,7 @@ SpMatrix<T> *cppLasso(Matrix<T> &X, Matrix<T> &Q, Matrix<T> &q,Matrix<T> **path,
 		      const bool pos= false, const bool ols= false, const int numThreads= -1,
 		      int max_length_path= -1,const bool verbose= false, bool cholevsky= false) 
 {
-  return _lassoD(&X,&Q,&q,path,return_reg_path,L,constraint,lambda2,mode,pos,ols, numThreads,
+  return _lassoQq(&X,&Q,&q,path,return_reg_path,L,constraint,lambda2,mode,pos,ols, numThreads,
 		 max_length_path, verbose, cholevsky);
 }
  
