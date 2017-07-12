@@ -285,4 +285,81 @@ TYPED_TEST(CSCLocalInverseNaiveTest, TestInverseResults) {
   REQUIRE_LT(std::fabs(this->beta_[2] - 6.), 1e-3);
 }
 
+template <Dtype>
+class Im2ColCPUCirculantTest : public MultiDeviceTest<CPUDevice<Dtype> > {
+ protected:
+  Im2ColCPUCirculantTest()
+      : blob_(new Blob<Dtype>(2, 2, 3, 4)), patches_(new Blob<Dtype>()),
+      nsamples_(2), channels_(2), height_(3), width_(4), kernel_h_(3),
+      kernel_w_(3), blob_recon_(new Blob<Dtype>(2, 2, 3, 4)) {}
+
+  virtual ~Im2ColCPUCirculantTest() {
+    delete blob_;
+    delete patches_;
+    delete blob_recon_
+  }
+
+  virtual void SetUp() {
+    vector<int> patch_shape(2);
+    patch_shape(1) = patches_ * channels_ * kernel_h_ * kernel_w_;
+    patch_shape(2) = height_ * width_;
+    patches_->Reshape(patch_shape);
+    for (int i = 0; i < blob_->count(); ++i) {
+      blob_->mutable_cpu_data()[i] = static_cast<Dtype>(i+1);
+    }
+  }
+
+  Blob<Dtype>* const blob_;
+  Blob<Dtype>* const patches_;
+  Blob<Dtype>* const blob_recon_;
+  int nsamples_;
+  int channels_;
+  int height_;
+  int width_;
+  int kernel_h_;
+  int kernel_w_;
+};
+
+TYPED_TEST_CASE(Im2ColCPUCirculantTest, TestDtypes);
+
+TYPED_TEST(Im2ColCPUCirculantTest, TestCirculantFront) {
+  const int patches_gt[] = {
+    7,  8,  5,  6, 11, 12,  9, 10,  3,  4,  1,  2,
+    8,  5,  6,  7, 12,  9, 10, 11,  4,  1,  2,  3,
+    5,  6,  7,  8,  9, 10, 11, 12,  1,  2,  3,  4,
+   11, 12,  9, 10,  3,  4,  1,  2,  7,  8,  5,  6,
+   12,  9, 10, 11,  4,  1,  2,  3,  8,  5,  6,  7,
+    9, 10, 11, 12,  1,  2,  3,  4,  5,  6,  7,  8,
+    3,  4,  1,  2,  7,  8,  5,  6, 11, 12,  9, 10,
+    4,  1,  2,  3,  8,  5,  6,  7, 12,  9, 10, 11,
+    1,  2,  3,  4,  5,  6,  7,  8,  9, 10, 11, 12
+  };
+  Dtype *patch_ptr = patches_->mutable_cpu_data();
+  im2col_cpu_circulant(blob_->cpu_data(), nsamples_, channels_,
+    height_, width_, kernel_h_, kernel_w, height_-1, width_-1,
+    patch_ptr);
+  int chunk_size = kernel_h_ * kernel_w_ * height_ * width_;
+  for (int i = 0; i < nsmaples_*channels_; ++i) {
+    for (int j = 0; j < chunk_size; ++j) {
+      EXPECT_EQ(staic_cast<int>(patch_ptr[i*chunk_size+j]),
+        patches_gt[j]+i*height_*wdith_);
+    }
+  }
+}
+
+TYPED_TEST(Im2ColCPUCirculantTest, TestCol2ImFront) {
+  const int pad_h = height_ - 1;
+  const int pad_w = width_ - 1;
+  im2col_cpu_circulant(blob_->cpu_data(), nsamples_, channels_,
+    height_, width_, kernel_h_, kernel_w_, pad_h, pad_w,
+    patches_->mutable_cpu_data());
+  col2im_cpu_circulant(patches_->cpu_data(), nsamples_, channels_,
+    height_, width_, kernel_h_, kernel_w_, pad_h, pad_w,
+    blob_recon_->mutable_cpu_data());
+  for (int i = 0; i < blob_->count(); ++i) {
+    EXPECT_EQ(blob_->cpu_data()[i]*kernel_h_*kernel_w_,
+      blob_recon_->cpu_data()[i]);
+  }
+}
+
 } // namespace caffe
