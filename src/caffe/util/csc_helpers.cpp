@@ -70,7 +70,7 @@ void SpBlob<Dtype>::ToFull(Blob<Dtype> *full) {
   fullshape[0] = nrow_;
   fullshape[1] = ncol_;
   full->Reshape(fullshape);
-  caffe_set(full->count(), Dtype(0), full.mutable_cpu_data());
+  caffe_set(full->count(), Dtype(0), full->mutable_cpu_data());
   for (int c = 0; c < ncol_; ++c) {
     for (int row_ctr = pB_data()[c]; row_ctr != pE_data()[c]; ++row_ctr) {
       int r = mutable_rows_data()[row_ctr];
@@ -130,6 +130,9 @@ const Dtype SpBlob<Dtype>::at(int r, int c) const {
   return val;
 }
 
+// Instantiate class!
+INSTANTIATE_CLASS(SpBlob);
+
 // Note that caffe::Blob is row major (inrease last) while Matrix in spams is col major
 // (increase first). We use a workaround for this problem:
 template <typename Dtype>
@@ -151,7 +154,7 @@ void lasso_cpu(const Blob<Dtype> *X, const Blob<Dtype> *D, Dtype lambda1, Dtype 
   Matrix<Dtype> alpha_mat;
   SpMatrix<Dtype> *alpha_spmat = NULL;
   try {
-    alpha_spmat = cppLasso(&X_mat, &D_mat, NULL, false, L, lambda1, lambda2);
+    alpha_spmat = cppLasso(X_mat, D_mat, (Matrix<Dtype> **)NULL, false, L, lambda1, lambda2);
   } catch (const char *err) {
     LOG(FATAL) << err;
   }
@@ -159,9 +162,13 @@ void lasso_cpu(const Blob<Dtype> *X, const Blob<Dtype> *D, Dtype lambda1, Dtype 
   alpha_spmat->toFullTrans(alpha_mat);
   spalpha->Reshape(alpha_spmat->nnz(), alpha_spmat->n(), alpha_spmat->m());
   spalpha->CopyFrom(alpha_spmat->v(), alpha_spmat->r(), alpha_spmat->pB(), alpha_spmat->pE());
-  caffe_copy(alpha->count(), alpha_spmat.X(), alpha->mutable_cpu_data());
+  caffe_copy(alpha->count(), alpha_spmat->X(), alpha->mutable_cpu_data());
   delete alpha_spmat;
 }
+template void lasso_cpu<float>(const Blob<float> *X, const Blob<float> *D, float lambda1, 
+  float lambda2, int L, Blob<float> *alpha, SpBlob<float> *spalpha);
+template void lasso_cpu<double>(const Blob<double> *X, const Blob<double> *D, double lambda1, 
+  double lambda2, int L, Blob<double> *alpha, SpBlob<double> *spalpha);
 
 template <>
 void caffe_cpu_imatcopy<float>(const int rows, const int cols, float *X) {
