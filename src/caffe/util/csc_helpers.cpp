@@ -294,7 +294,7 @@ template <typename Dtype>
 void col2im_cpu_circulant(const Dtype *patches, const int channels,
 	const int height, const int width, const int kernel_h, const int kernel_w,
 	const int pad_h, const int pad_w, Dtype *blob) {
-  caffe_set(channels * height * with, Dtype(0), blob);
+  caffe_set(channels * height * width, Dtype(0), blob);
   const int chunk_size = kernel_h * kernel_w * height * width;
   // parallel over channels
   #ifdef _OPENMP
