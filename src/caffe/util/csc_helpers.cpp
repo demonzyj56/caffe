@@ -159,10 +159,12 @@ void lasso_cpu(const Blob<Dtype> *X, const Blob<Dtype> *D, Dtype lambda1, Dtype 
     LOG(FATAL) << err;
   }
   CHECK(alpha_spmat);
+  // copy to Matrix and then to Blob
   alpha_spmat->toFullTrans(alpha_mat);
+  caffe_copy(alpha->count(), alpha_mat.X(), alpha->mutable_cpu_data());
+  // copy to SpBlob
   spalpha->Reshape(alpha_spmat->nnz(), alpha_spmat->n(), alpha_spmat->m());
   spalpha->CopyFrom(alpha_spmat->v(), alpha_spmat->r(), alpha_spmat->pB(), alpha_spmat->pE());
-  caffe_copy(alpha->count(), alpha_spmat->X(), alpha->mutable_cpu_data());
   delete alpha_spmat;
 }
 template void lasso_cpu<float>(const Blob<float> *X, const Blob<float> *D, float lambda1, 
