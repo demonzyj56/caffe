@@ -3,7 +3,7 @@
 #include "gtest/gtest.h"
 #include "caffe/common.hpp"
 #include "caffe/blob.hpp"
-#include "caffe/ufiller.hpp"
+#include "caffe/filler.hpp"
 #include "caffe/util/csc_helpers.hpp"
 #include "caffe/test/test_caffe_main.hpp"
 
@@ -37,9 +37,9 @@ TYPED_TEST(SpBlobTest, TestInitialization) {
   EXPECT_TRUE(this->spblob1_->rows_data());
   EXPECT_TRUE(this->spblob1_->pB_data());
   EXPECT_TRUE(this->spblob1_->pE_data());
-  EXTECT_EQ(this->spblob1_->nnz(), 5);
-  EXTECT_EQ(this->spblob1_->nrow(), 4);
-  EXTECT_EQ(this->spblob1_->ncol(), 5);
+  EXPECT_EQ(this->spblob1_->nnz(), 5);
+  EXPECT_EQ(this->spblob1_->nrow(), 4);
+  EXPECT_EQ(this->spblob1_->ncol(), 5);
 }
 
 TYPED_TEST(SpBlobTest, TestReshape) {
@@ -50,7 +50,7 @@ TYPED_TEST(SpBlobTest, TestReshape) {
 }
 
 TYPED_TEST(SpBlobTest, TestDataCopy) {
-  const Dtype values[] = {1., -2., -4., -1., 5., 8., 4., 2., -3., 6., 7., 4., -5.};
+  const TypeParam values[] = {1., -2., -4., -1., 5., 8., 4., 2., -3., 6., 7., 4., -5.};
   const int rows[] = {0, 1, 3, 0, 1, 4, 2, 3, 0, 2, 3, 2, 4};
   const int pB[] = {0, 3, 6, 8, 11};
   const int pE[] = {3, 6, 8, 11, 13};
@@ -66,13 +66,13 @@ TYPED_TEST(SpBlobTest, TestDataCopy) {
   }
 }
 TYPED_TEST(SpBlobTest, TestBlobCopy) {
-  const Dtype values[] = {1., -2., -4., -1., 5., 8., 4., 2., -3., 6., 7., 4., -5.};
+  const TypeParam values[] = {1., -2., -4., -1., 5., 8., 4., 2., -3., 6., 7., 4., -5.};
   const int rows[] = {0, 1, 3, 0, 1, 4, 2, 3, 0, 2, 3, 2, 4};
   const int pB[] = {0, 3, 6, 8, 11};
   const int pE[] = {3, 6, 8, 11, 13};
   this->spblob2_->Reshape(13, 5, 5);
   this->spblob2_->CopyFrom(values, rows, pB, pE);
-  this->spblob1_->CopyFrom(*this->spblob2_);
+  this->spblob1_->CopyFrom(this->spblob2_);
   for (int i = 0; i < 13; ++i) {
     EXPECT_EQ(values[i], this->spblob1_->values_data()[i]);
     EXPECT_EQ(rows[i], this->spblob1_->rows_data()[i]);
@@ -84,18 +84,18 @@ TYPED_TEST(SpBlobTest, TestBlobCopy) {
 }
 
 TYPED_TEST(SpBlobTest, TestToFull) {
-  const Dtype values[] = {1., -2., -4., -1., 5., 8., 4., 2., -3., 6., 7., 4., -5.};
+  const TypeParam values[] = {1., -2., -4., -1., 5., 8., 4., 2., -3., 6., 7., 4., -5.};
   const int rows[] = {0, 1, 3, 0, 1, 4, 2, 3, 0, 2, 3, 2, 4};
   const int pB[] = {0, 3, 6, 8, 11};
   const int pE[] = {3, 6, 8, 11, 13};
-  const Dtype full_vaules[] = {1., -1., 0., -3., 0,
+  const TypeParam full_values[] = {1., -1., 0., -3., 0,
                                -2., 5., 0., 0., 0.,
                                0., 0., 4., 6., 4.,
-                               -4. 0., 2., 7., 0.,
+                               -4., 0., 2., 7., 0.,
                                 0., 8., 0., 0., -5.};
   this->spblob2_->Reshape(13, 5, 5);
   this->spblob2_->CopyFrom(values, rows, pB, pE);
-  this->spblob2->ToFull(this->blob_);
+  this->spblob2_->ToFull(this->blob_);
   EXPECT_EQ(this->blob_->count(), 25);
   EXPECT_EQ(this->blob_->shape(0), 5);
   EXPECT_EQ(this->blob_->shape(1), 5);
@@ -107,21 +107,21 @@ TYPED_TEST(SpBlobTest, TestToFull) {
 }
 
 TYPED_TEST(SpBlobTest, TestIndexAccess) {
-  const Dtype values[] = {1., -2., -4., -1., 5., 8., 4., 2., -3., 6., 7., 4., -5.};
+  const TypeParam values[] = {1., -2., -4., -1., 5., 8., 4., 2., -3., 6., 7., 4., -5.};
   const int rows[] = {0, 1, 3, 0, 1, 4, 2, 3, 0, 2, 3, 2, 4};
   const int pB[] = {0, 3, 6, 8, 11};
   const int pE[] = {3, 6, 8, 11, 13};
-  const Dtype full_vaules[] = {1., -1., 0., -3., 0,
+  const TypeParam full_values[] = {1., -1., 0., -3., 0,
                                -2., 5., 0., 0., 0.,
                                0., 0., 4., 6., 4.,
-                               -4. 0., 2., 7., 0.,
+                               -4., 0., 2., 7., 0.,
                                 0., 8., 0., 0., -5.};
   this->spblob2_->Reshape(13, 5, 5);
   this->spblob2_->CopyFrom(values, rows, pB, pE);
   for (int i = 0; i < this->spblob2_->nrow(); ++i) {
     for (int j = 0; j < this->spblob2_->ncol(); ++j) {
       EXPECT_EQ(this->spblob2_->at(i, j), 
-        full_values[i], this->spblob2_->ncol()*i + j);
+        full_values[this->spblob2_->ncol()*i + j]);
     }
   }
 }
@@ -130,7 +130,7 @@ template <typename Dtype>
 class CPULassoTest : public MultiDeviceTest<CPUDevice<Dtype> > {
  protected:
   CPULassoTest() 
-      : X_(new Blob<Dtype>()), D_(new Blob<Dtype>>()), lambda1_(0),
+      : X_(new Blob<Dtype>()), D_(new Blob<Dtype>()), lambda1_(0),
         lambda2_(0), L_(0), alpha_(new Blob<Dtype>()),
         spalpha_(new SpBlob<Dtype>()) {}
   virtual ~CPULassoTest() {
@@ -159,10 +159,10 @@ class CPULassoTest : public MultiDeviceTest<CPUDevice<Dtype> > {
     filler_param.set_mean(0.);
     filler_param.set_std(1.);
     GaussianFiller<Dtype> filler(filler_param);
-    filler.fill(this->X_);
-    filler.fill(this->D_);
+    filler.Fill(this->X_);
+    filler.Fill(this->D_);
     this->lambda1_ = 0.1;
-    this->lambds2_ = 0.1;
+    this->lambda2_ = 0.1;
     this->L_ = 10;
     lasso_cpu(this->X_, this->D_, this->lambda1_, this->lambda2_, this->L_,
       this->alpha_, this->spalpha_);
@@ -183,7 +183,7 @@ TYPED_TEST(CPULassoTest, TestNothing) {
 }
 
 TYPED_TEST(CPULassoTest, TestSparseReturn) {
-  EXPECT(this->spalpha_->nnz() > 0);
+  EXPECT_GT(this->spalpha_->nnz(), 0);
   EXPECT_EQ(this->spalpha_->nrow(), this->alpha_->shape(0));
   EXPECT_EQ(this->spalpha_->ncol(), this->alpha_->shape(1));
 }
@@ -191,7 +191,7 @@ TYPED_TEST(CPULassoTest, TestSparseReturn) {
 TYPED_TEST(CPULassoTest, TestSparseAndDenseReturnCoincide) {
   for (int i = 0; i < this->alpha_->shape(0); ++i) {
     for (int j = 0; j < this->alpha_->shape(1); ++j) {
-      EXPECT_EQ(this->spalha_->at(i, j),
+      EXPECT_EQ(this->spalpha_->at(i, j),
         this->alpha_->cpu_data()[i * this->alpha_->shape(1) + j]);
     }
   }
@@ -218,28 +218,29 @@ class CPUMatCopyTest : public MultiDeviceTest<CPUDevice<Dtype> > {
 TYPED_TEST_CASE(CPUMatCopyTest, TestDtypes);
 
 TYPED_TEST(CPUMatCopyTest, TestInPlaceCopy) {
-  caffe_cpu_imatcopy(this->rows_, this->cols_, vec_from_.data());
-  for (int i = 0; i < rows_; ++i) {
-    for (int j = 0; j < cols_; ++j) {
-      EXPECT_EQ(vec_from_[j*rows_+i], i*cols+j);
+  caffe_cpu_imatcopy(this->rows_, this->cols_, this->vec_from_.data());
+  for (int i = 0; i < this->rows_; ++i) {
+    for (int j = 0; j < this->cols_; ++j) {
+      EXPECT_EQ(this->vec_from_[j*this->rows_+i], i*this->cols_+j);
     }
   }
 }
 
 TYPED_TEST(CPUMatCopyTest, TestOutOfPlaceCopy) {
-  caffe_cpu_omatcopy(this->rows_, this->cols_, vec_from_.data(), vec_to_.data());
-  for (int i = 0; i < rows_; ++i) {
-    for (int j = 0; j < cols_; ++j) {
-      EXPECT_EQ(vec_to_[j*rows_+i], vec_from_[i*cols+j]);
+  caffe_cpu_omatcopy(this->rows_, this->cols_, this->vec_from_.data(),
+    this->vec_to_.data());
+  for (int i = 0; i < this->rows_; ++i) {
+    for (int j = 0; j < this->cols_; ++j) {
+      EXPECT_EQ(this->vec_to_[j*this->rows_+i], this->vec_from_[i*this->cols_+j]);
     }
   }
 }
 
-template <Dtype>
+template <typename Dtype>
 class CSCLocalInverseNaiveTest : public MultiDeviceTest<CPUDevice<Dtype> > {
  protected:
   CSCLocalInverseNaiveTest()
-      : m_(5), nnz_(3), lambda2_(0.5), DtD_(new Dtype[25]), rhs_(new Dtype[3])
+      : m_(5), nnz_(3), lambda2_(0.5), DtD_(new Dtype[25]), rhs_(new Dtype[3]),
         index_(new int[3]), beta_(new Dtype[3]) {}
   virtual ~CSCLocalInverseNaiveTest() {
     delete[] DtD_;
@@ -251,8 +252,8 @@ class CSCLocalInverseNaiveTest : public MultiDeviceTest<CPUDevice<Dtype> > {
     for (int i = 0; i < 25; ++i) DtD_[i] = 0.;
     for (int i = 2; i < 4; ++i) {
       for (int j = 0; j < 5; ++j) {
-        DtD_[i * 5 + j] = 1.;
-        DtD_[j * 5 + i] = 1.;
+        this->DtD_[i * 5 + j] = 1.;
+        this->DtD_[j * 5 + i] = 1.;
       }
     }
     this->index_[0] = 0;
@@ -280,12 +281,12 @@ TYPED_TEST(CSCLocalInverseNaiveTest, TestNothing) {
 }
 
 TYPED_TEST(CSCLocalInverseNaiveTest, TestInverseResults) {
-  REQUIRE_LT(std::fabs(this->beta_[0] - 2.), 1e-3);
-  REQUIRE_LT(std::fabs(this->beta_[1] - 4.), 1e-3);
-  REQUIRE_LT(std::fabs(this->beta_[2] - 6.), 1e-3);
+  EXPECT_LT(std::fabs(this->beta_[0] - 2.), 1e-3);
+  EXPECT_LT(std::fabs(this->beta_[1] - 4.), 1e-3);
+  EXPECT_LT(std::fabs(this->beta_[2] - 6.), 1e-3);
 }
 
-template <Dtype>
+template <typename Dtype>
 class Im2ColCPUCirculantTest : public MultiDeviceTest<CPUDevice<Dtype> > {
  protected:
   Im2ColCPUCirculantTest()
@@ -296,28 +297,29 @@ class Im2ColCPUCirculantTest : public MultiDeviceTest<CPUDevice<Dtype> > {
   virtual ~Im2ColCPUCirculantTest() {
     delete blob_;
     delete patches_;
-    delete blob_recon_
+    delete blob_recon_;
   }
 
   virtual void SetUp() {
     vector<int> patch_shape(2);
-    patch_shape(1) = patches_ * channels_ * kernel_h_ * kernel_w_;
-    patch_shape(2) = height_ * width_;
-    patches_->Reshape(patch_shape);
-    for (int i = 0; i < blob_->count(); ++i) {
-      blob_->mutable_cpu_data()[i] = static_cast<Dtype>(i+1);
+    patch_shape[0] = this->nsamples_ * this->channels_ * 
+      this->kernel_h_ * this->kernel_w_;
+    patch_shape[1] = this->height_ * this->width_;
+    this->patches_->Reshape(patch_shape);
+    for (int i = 0; i < this->blob_->count(); ++i) {
+      this->blob_->mutable_cpu_data()[i] = static_cast<Dtype>(i+1);
     }
   }
 
   Blob<Dtype>* const blob_;
   Blob<Dtype>* const patches_;
-  Blob<Dtype>* const blob_recon_;
   int nsamples_;
   int channels_;
   int height_;
   int width_;
   int kernel_h_;
   int kernel_w_;
+  Blob<Dtype>* const blob_recon_;
 };
 
 TYPED_TEST_CASE(Im2ColCPUCirculantTest, TestDtypes);
@@ -334,31 +336,33 @@ TYPED_TEST(Im2ColCPUCirculantTest, TestCirculantFront) {
     4,  1,  2,  3,  8,  5,  6,  7, 12,  9, 10, 11,
     1,  2,  3,  4,  5,  6,  7,  8,  9, 10, 11, 12
   };
-  Dtype *patch_ptr = patches_->mutable_cpu_data();
-  im2col_cpu_circulant(blob_->cpu_data(), nsamples_, channels_,
-    height_, width_, kernel_h_, kernel_w, height_-1, width_-1,
+  TypeParam *patch_ptr = this->patches_->mutable_cpu_data();
+  im2col_cpu_circulant(this->blob_->cpu_data(), this->nsamples_*this->channels_,
+    this->height_, this->width_, this->kernel_h_,
+    this->kernel_w_, this->height_-1, this->width_-1,
     patch_ptr);
-  int chunk_size = kernel_h_ * kernel_w_ * height_ * width_;
-  for (int i = 0; i < nsmaples_*channels_; ++i) {
+  int chunk_size = this->kernel_h_ * this->kernel_w_ * this->height_ * this->width_;
+  for (int i = 0; i < this->nsamples_*this->channels_; ++i) {
     for (int j = 0; j < chunk_size; ++j) {
-      EXPECT_EQ(staic_cast<int>(patch_ptr[i*chunk_size+j]),
-        patches_gt[j]+i*height_*wdith_);
+      EXPECT_EQ(static_cast<int>(patch_ptr[i*chunk_size+j]),
+        patches_gt[j]+i*this->height_*this->width_);
     }
   }
 }
 
 TYPED_TEST(Im2ColCPUCirculantTest, TestCol2ImFront) {
-  const int pad_h = height_ - 1;
-  const int pad_w = width_ - 1;
-  im2col_cpu_circulant(blob_->cpu_data(), nsamples_, channels_,
-    height_, width_, kernel_h_, kernel_w_, pad_h, pad_w,
-    patches_->mutable_cpu_data());
-  col2im_cpu_circulant(patches_->cpu_data(), nsamples_, channels_,
-    height_, width_, kernel_h_, kernel_w_, pad_h, pad_w,
-    blob_recon_->mutable_cpu_data());
-  for (int i = 0; i < blob_->count(); ++i) {
-    EXPECT_EQ(blob_->cpu_data()[i]*kernel_h_*kernel_w_,
-      blob_recon_->cpu_data()[i]);
+  const int pad_h = this->height_ - 1;
+  const int pad_w = this->width_ - 1;
+  im2col_cpu_circulant(this->blob_->cpu_data(), this->nsamples_*this->channels_,
+    this->height_, this->width_, this->kernel_h_,
+    this->kernel_w_, pad_h, pad_w,
+    this->patches_->mutable_cpu_data());
+  col2im_cpu_circulant(this->patches_->cpu_data(), this->nsamples_*this->channels_,
+    this->height_, this->width_, this->kernel_h_, this->kernel_w_, pad_h, pad_w,
+    this->blob_recon_->mutable_cpu_data());
+  for (int i = 0; i < this->blob_->count(); ++i) {
+    EXPECT_EQ(this->blob_->cpu_data()[i]*this->kernel_h_*this->kernel_w_,
+      this->blob_recon_->cpu_data()[i]);
   }
 }
 
