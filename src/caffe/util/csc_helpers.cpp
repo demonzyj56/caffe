@@ -154,7 +154,8 @@ void lasso_cpu(const Blob<Dtype> *X, const Blob<Dtype> *D, Dtype lambda1, Dtype 
   Matrix<Dtype> alpha_mat;
   SpMatrix<Dtype> *alpha_spmat = NULL;
   try {
-    alpha_spmat = cppLasso(X_mat, D_mat, (Matrix<Dtype> **)NULL, false, L, lambda1, lambda2);
+    Matrix<Dtype> *null_path_ptr = NULL;
+    alpha_spmat = cppLasso(X_mat, D_mat, &null_path_ptr, false, L, lambda1, lambda2);
   } catch (const char *err) {
     LOG(FATAL) << err;
   }
@@ -163,7 +164,9 @@ void lasso_cpu(const Blob<Dtype> *X, const Blob<Dtype> *D, Dtype lambda1, Dtype 
   alpha_spmat->toFullTrans(alpha_mat);
   caffe_copy(alpha->count(), alpha_mat.X(), alpha->mutable_cpu_data());
   // copy to SpBlob
-  spalpha->Reshape(alpha_spmat->nnz(), alpha_spmat->n(), alpha_spmat->m());
+  // !!! NOTE: the comment in linalg.h is WRONG.
+  // SpMatrix<Dtype>::m() is actually row index.
+  spalpha->Reshape(alpha_spmat->nnz(), alpha_spmat->m(), alpha_spmat->n());
   spalpha->CopyFrom(alpha_spmat->v(), alpha_spmat->r(), alpha_spmat->pB(), alpha_spmat->pE());
   delete alpha_spmat;
 }
