@@ -539,6 +539,13 @@ LIBRARY_DIRS += $(MKLDNN_LIB)
 
 LIBRARY_DIRS += $(LIB_BUILD_DIR)
 
+ifeq ($(BLAS), mkl)
+	# Add mkl_lapack!
+	MKL_LAPACKE_LIB ?= /opt/intel/mkl/lib /opt/intel/mkl/lib/intel64
+	LIBRARIES += mkl_rt
+	LIBRARY_DIRS += $(MKL_LAPACKE_LIB)
+endif
+
 # Automatic dependency generation (nvcc is handled separately)
 CXXFLAGS += -MMD -MP
 
