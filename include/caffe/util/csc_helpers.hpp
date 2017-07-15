@@ -106,12 +106,12 @@ void csc_local_inverse_naive(const int m, const Dtype lambda2, const Dtype *DtD,
 template <typename Dtype>
 inline void extract_patches(const Blob<Dtype> *blob, int kernel_h, int kernel_w,
     CSCParameter::Boundary boundary, Blob<Dtype> *patches) {
-  CHECK(blob->shape(0)*blob->shape(1)*kernel_h*kernel_w == patches->shape(0));
+  CHECK_EQ(blob->shape(0)*blob->shape(1)*kernel_h*kernel_w, patches->shape(0));
   if (boundary == CSCParameter::NOPAD) {
     int patch_width = (blob->shape(2)-kernel_h+1) * (blob->shape(3)-kernel_w+1);
-    CHECK(patches->shape(1) == patch_width);
+    CHECK_EQ(patches->shape(1), patch_width);
   } else {
-    CHECK(patches->shape(1) == blob->shape(2) * blob->shape(3));
+    CHECK_EQ(patches->shape(1), blob->shape(2) * blob->shape(3));
   }
   im2col_csc_cpu(blob->cpu_data(), blob->shape(0), blob->shape(1), blob->shape(2),
     blob->shape(3), kernel_h, kernel_w, boundary, patches->mutable_cpu_data());
@@ -124,12 +124,12 @@ template void extract_patches<double>(const Blob<double> *blob, int kernel_h, in
 template <typename Dtype>
 inline void aggregate_patches(const Blob<Dtype> *patches, int kernel_h, int kernel_w,
     CSCParameter::Boundary boundary, Blob<Dtype> *blob) {
-  CHECK(blob->shape(0)*blob->shape(1)*kernel_h*kernel_w == patches->shape(0));
+  CHECK_EQ(blob->shape(0)*blob->shape(1)*kernel_h*kernel_w, patches->shape(0));
   if (boundary == CSCParameter::NOPAD) {
     int patch_width = (blob->shape(2)-kernel_h+1) * (blob->shape(3)-kernel_w+1);
-    CHECK(patches->shape(1) == patch_width);
+    CHECK_EQ(patches->shape(1), patch_width);
   } else {
-    CHECK(patches->shape(1) == blob->shape(2) * blob->shape(3));
+    CHECK_EQ(patches->shape(1), blob->shape(2) * blob->shape(3));
   }
   col2im_csc_cpu(patches->cpu_data(), blob->shape(0), blob->shape(1), blob->shape(2),
     blob->shape(3), kernel_h, kernel_w, boundary, blob->mutable_cpu_data());
