@@ -44,6 +44,8 @@ void CSCLayer<Dtype>::LayerSetUp(const vector<Blob<Dtype>*>& bottom,
   top_patch_shape_.resize(2);
   top_patch_shape_[0] = num_output_;
   top_patch_shape_[1] = bottom_patch_shape_[1];
+  this->alpha_ = shared_ptr<Blob<Dtype> > (new Blob<Dtype>(top_patch_shape_));
+  this->spalpha_ = shared_ptr<SpBlob<Dtype> >(new SpBlob<Dtype>());
 }
 
 template <typename Dtype>
@@ -67,6 +69,7 @@ void CSCLayer<Dtype>::Reshape(const vector<Blob<Dtype>*>& bottom,
   top_patch_shape_.resize(2);
   top_patch_shape_[0] = num_output_;
   top_patch_shape_[1] = bottom_patch_shape_[1];
+  this->alpha_->Reshape(top_patch_shape_);
 }
 
 // Implement using ADMM.
@@ -79,7 +82,6 @@ void CSCLayer<Dtype>::Forward_cpu(const vector<Blob<Dtype>*>& bottom,
   Blob<Dtype> bottom_patch(bottom_patch_shape_);
   Blob<Dtype> slice(bottom_patch_shape_);
   Blob<Dtype> dual_var(bottom_patch_shape_);
-  Blob<Dtype> alpha(top_patch_shape_);
   Blob<Dtype> DLalpha_minus_u(bottom_patch_shape_);
   Blob<Dtype> bottom_recon(bottom_shape);
 
@@ -92,8 +94,8 @@ void CSCLayer<Dtype>::Forward_cpu(const vector<Blob<Dtype>*>& bottom,
     // local sparse pursuit
     caffe_axpy(slice.count(), Dtype(1), dual_var.cpu_data(), slice.mutable_cpu_data());
     lasso_cpu(&slice, this->blobs_[0].get(), lambda1_/rho, lambda2_/rho, lasso_lars_L_,
-      &alpha, &this->spalpha_);
-    this->gemm_Dlalpha_cpu_(&alpha, &DLalpha_minus_u);
+      this->alpha_.get(), this->spalpha_.get());
+    this->gemm_Dlalpha_cpu_(this->alpha_.get(), &DLalpha_minus_u);
     caffe_axpy(DLalpha_minus_u.count(), Dtype(-1), dual_var.cpu_data(),
       DLalpha_minus_u.mutable_cpu_data());
     // slice reconstruction
@@ -117,15 +119,21 @@ void CSCLayer<Dtype>::Forward_cpu(const vector<Blob<Dtype>*>& bottom,
   #pragma omp parallel for
   #endif
   for (int i = 0; i < top[0]->shape(0)*top[0]->shape(1); ++i) {
-    int n = i / channels_;
-    int c = i % channels_;
+    int n = i / num_output_;
+    int c = i % num_output_;
     int alpha_from = c*top_patch_shape_[1] + n*patch_width;
     int top_to = i * patch_width;
-    caffe_copy(patch_width, alpha.cpu_data() + alpha_from,
+    caffe_copy(patch_width, this->alpha_->cpu_data() + alpha_from,
       top[0]->mutable_cpu_data() + top_to);
   }
 }
-
+template <typename Dtype>
+void CSCLayer<Dtype>::Backward_cpu(const vector<Blob<Dtype>*>& top,
+      const vector<bool>& propagate_down,
+      const vector<Blob<Dtype>*>& bottom) {
+  NOT_IMPLEMENTED;
+}
+/*
 template <typename Dtype>
 void CSCLayer<Dtype>::Backward_cpu(const vector<Blob<Dtype>*>& top,
       const vector<bool>& propagate_down,
@@ -141,17 +149,23 @@ void CSCLayer<Dtype>::Backward_cpu(const vector<Blob<Dtype>*>& top,
   Blob<Dtype> beta(top_patch_shape_);
   Blob<Dtype> residual(bottom_patch_shape_);
   Blob<Dtype> bottom_recon(bottom[0]->shape());
-  Blob<Dtype> &Dlbeta = residual;
-  Blob<Dtype> &beta_recon = bottom_recon;
+  // Blob<Dtype> &Dlbeta = residual;
+  // Blob<Dtype> &beta_recon = bottom_recon;
+  Blob<Dtype> Dlbeta(bottom_patch_shape_);
+  Blob<Dtype> beta_recon(bottom[0]->shape());
   Blob<Dtype> dict_buffer(this->blobs_[0]->shape());
-  spbeta.CopyFrom(&spalpha_);
+  spbeta.CopyFrom(spalpha_.get());
   if (this->param_propagate_down_[0]) {
     // compute beta
-    for (int i = 0; i < spalpha_.ncol(); ++i) {
-      const Dtype *rhs = spalpha_.values_data() + spalpha_.pB_data()[i];
-      const int *index = spalpha_.rows_data() + spalpha_.pB_data()[i];
-      int nnz = spalpha_.pE_data()[i] - spalpha_.pB_data()[i];
-      Dtype *lhs = spbeta.mutable_values_data() + spalpha_.pB_data()[i];
+    for (int i = 0; i < spalpha_->ncol(); ++i) {
+      // const Dtype *rhs = spalpha_.values_data() + spalpha_.pB_data()[i];
+      // const int *index = spalpha_.rows_data() + spalpha_.pB_data()[i];
+      // int nnz = spalpha_.pE_data()[i] - spalpha_.pB_data()[i];
+      // Dtype *lhs = spbeta.mutable_values_data() + spalpha_.pB_data()[i];
+      Dtype *rhs = spalpha_->values_at(i);
+      int *index = spalpha_->rows_at(i);
+      int nnz = spalpha_->nnz_at(i);
+      Dtype *lhs = spbeta.values_at(i);
       csc_local_inverse_naive(num_output_, lambda2_, DtD.mutable_cpu_data(),
         rhs, index, nnz, lhs);
     }
@@ -159,6 +173,7 @@ void CSCLayer<Dtype>::Backward_cpu(const vector<Blob<Dtype>*>& top,
     // compute derivative: first part
     Dtype *dict_diff = this->blobs_[0]->mutable_cpu_diff();
     caffe_set(this->blobs_[0]->count(), Dtype(0), dict_diff);
+    // TODO(leoyolo)
     caffe_cpu_gemm(CblasNoTrans, CblasNoTrans, bottom_patch_shape_[0],
       bottom_patch_shape_[1], num_output_, Dtype(1), this->blobs_[0]->cpu_data(),
       top[0]->cpu_data(), Dtype(0), residual.mutable_cpu_data());
@@ -192,7 +207,7 @@ void CSCLayer<Dtype>::Backward_cpu(const vector<Blob<Dtype>*>& top,
     caffe_copy(beta_recon.count(), beta_recon.cpu_data(), bottom[0]->mutable_cpu_diff());
   }
 }
-
+*/
 // TODO(leoyolo): naive impl
 template <typename Dtype>
 void CSCLayer<Dtype>::extract_patches_cpu_(const Blob<Dtype> *blob, Blob<Dtype> *patches) {
