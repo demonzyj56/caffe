@@ -130,6 +130,27 @@ const Dtype SpBlob<Dtype>::at(int r, int c) const {
   return val;
 }
 
+// column-wise accessor
+template <typename Dtype>
+Dtype *SpBlob<Dtype>::values_at(int c) {
+  CHECK(c < ncol_);
+  int ind = *(pB_data() + c);
+  return mutable_values_data() + ind;
+}
+
+template <typename Dtype>
+int *SpBlob<Dtype>::rows_at(int c) {
+  CHECK(c < ncol_);
+  int ind = *(pB_data() + c);
+  return mutable_rows_data() + ind;
+}
+
+template <typename Dtype>
+int SpBlob<Dtype>::nnz_at(int c) {
+  CHECK(c < ncol_);
+  return pE_data()[c] - pB_data()[c];
+}
+
 // Instantiate class!
 INSTANTIATE_CLASS(SpBlob);
 

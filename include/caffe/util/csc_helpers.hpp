@@ -39,6 +39,9 @@ class SpBlob {
   int nrow() const { return nrow_; }
   int ncol() const { return ncol_; }
   const Dtype at(int r, int c) const;
+  Dtype *values_at(int c);
+  int *rows_at(int c);
+  int nnz_at(int c);
  private:
   shared_ptr<SyncedMemory> values_;
   shared_ptr<SyncedMemory> rows_;
@@ -96,6 +99,46 @@ void col2im_csc_cpu(const Dtype *patches, const int nsamples, const int channels
 template <typename Dtype>
 void csc_local_inverse_naive(const int m, const Dtype lambda2, const Dtype *DtD,
     const Dtype *rhs, const int *index, const int nnz, Dtype *beta);
+
+// Utility function for extracting patches.
+// This essentially wraps around im2col so that I do not need to
+// explicitly handle pointer directly.
+template <typename Dtype>
+inline void extract_patches(const Blob<Dtype> *blob, int kernel_h, int kernel_w,
+    CSCParameter::Boundary boundary, Blob<Dtype> *patches) {
+  CHECK(blob->shape(0)*blob->shape(1)*kernel_h*kernel_w == patches->shape(0));
+  if (boundary == CSCParameter::NOPAD) {
+    int patch_width = (blob->shape(2)-kernel_h+1) * (blob->shape(3)-kernel_w+1);
+    CHECK(patches->shape(1) == patch_width);
+  } else {
+    CHECK(patches->shape(1) == blob->shape(2) * blob->shape(3));
+  }
+  im2col_csc_cpu(blob->cpu_data(), blob->shape(0), blob->shape(1), blob->shape(2),
+    blob->shape(3), kernel_h, kernel_w, boundary, patches->mutable_cpu_data());
+}
+template void extract_patches<float>(const Blob<float> *blob, int kernel_h, int kernel_w,
+    CSCParameter::Boundary boundary, Blob<float> *patches);
+template void extract_patches<double>(const Blob<double> *blob, int kernel_h, int kernel_w,
+    CSCParameter::Boundary boundary, Blob<double> *patches);
+
+template <typename Dtype>
+inline void aggregate_patches(const Blob<Dtype> *patches, int kernel_h, int kernel_w,
+    CSCParameter::Boundary boundary, Blob<Dtype> *blob) {
+  CHECK(blob->shape(0)*blob->shape(1)*kernel_h*kernel_w == patches->shape(0));
+  if (boundary == CSCParameter::NOPAD) {
+    int patch_width = (blob->shape(2)-kernel_h+1) * (blob->shape(3)-kernel_w+1);
+    CHECK(patches->shape(1) == patch_width);
+  } else {
+    CHECK(patches->shape(1) == blob->shape(2) * blob->shape(3));
+  }
+  col2im_csc_cpu(patches->cpu_data(), blob->shape(0), blob->shape(1), blob->shape(2),
+    blob->shape(3), kernel_h, kernel_w, boundary, blob->mutable_cpu_data());
+}
+template void aggregate_patches<float>(const Blob<float> *patches, int kernel_h, int kernel_w,
+    CSCParameter::Boundary boundary, Blob<float> *blob);
+template void aggregate_patches<double>(const Blob<double> *patches, int kernel_h, int kernel_w,
+    CSCParameter::Boundary boundary, Blob<double> *blob);
+ 
 
 } // namespace caffe
 
