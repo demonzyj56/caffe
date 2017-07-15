@@ -59,9 +59,13 @@ void CSCLayer<Dtype>::Reshape(const vector<Blob<Dtype>*>& bottom,
   }
   top[0]->Reshape(top_shape);
   // reshape buffer before forward, if changed
+  bottom_patch_shape_.resize(2);
+  bottom_patch_shape_[0] = channels_ * kernel_h_ * kernel_w_;
   bottom_patch_shape_[1] = (boundary_ == CSCParameter::NOPAD) ?
       (bottom[0]->shape(0)*(bottom[0]->shape(2)-kernel_h_+1)*(bottom[0]->shape(3)-kernel_w_+1)) : 
       (bottom[0]->shape(0)*bottom[0]->shape(2)*bottom[0]->shape(3));
+  top_patch_shape_.resize(2);
+  top_patch_shape_[0] = num_output_;
   top_patch_shape_[1] = bottom_patch_shape_[1];
 }
 
@@ -70,7 +74,7 @@ template <typename Dtype>
 void CSCLayer<Dtype>::Forward_cpu(const vector<Blob<Dtype>*>& bottom,
       const vector<Blob<Dtype>*>& top) {
   const vector<int> &bottom_shape = bottom[0]->shape();
-  int patch_size = bottom_patch_shape_[0];
+  int patch_size = channels_ * kernel_h_ * kernel_w_;
   // initialize bottom_patch
   Blob<Dtype> bottom_patch(bottom_patch_shape_);
   Blob<Dtype> slice(bottom_patch_shape_);
@@ -78,11 +82,10 @@ void CSCLayer<Dtype>::Forward_cpu(const vector<Blob<Dtype>*>& bottom,
   Blob<Dtype> alpha(top_patch_shape_);
   Blob<Dtype> DLalpha_minus_u(bottom_patch_shape_);
   Blob<Dtype> bottom_recon(bottom_shape);
-  im2col_csc_cpu(bottom[0]->cpu_data(), bottom_shape[0], channels_,
-    bottom_shape[2], bottom_shape[3], kernel_h_, kernel_w_, boundary_,
-    bottom_patch.mutable_cpu_data());
+
+  this->extract_patches_cpu_(bottom[0], &bottom_patch);
   caffe_copy(bottom_patch.count(), bottom_patch.cpu_data(), slice.mutable_cpu_data());
-  caffe_scal(slice.count(), Dtype(1./slice.shape(0)), slice.mutable_cpu_data());
+  caffe_scal(slice.count(), Dtype(1./patch_size), slice.mutable_cpu_data());
   caffe_set(dual_var.count(), Dtype(0), dual_var.mutable_cpu_data());
   Dtype rho = 1.;
   for (int t = 0; t < admm_max_iter_; ++t) {
@@ -90,21 +93,16 @@ void CSCLayer<Dtype>::Forward_cpu(const vector<Blob<Dtype>*>& bottom,
     caffe_axpy(slice.count(), Dtype(1), dual_var.cpu_data(), slice.mutable_cpu_data());
     lasso_cpu(&slice, this->blobs_[0].get(), lambda1_/rho, lambda2_/rho, lasso_lars_L_,
       &alpha, &this->spalpha_);
-    caffe_cpu_gemm(CblasNoTrans, CblasNoTrans, patch_size, alpha.shape(1),
-      num_output_, Dtype(1), this->blobs_[0]->cpu_data(), alpha.cpu_data(), Dtype(0),
-      DLalpha_minus_u.mutable_cpu_data());
+    this->gemm_Dlalpha_cpu_(&alpha, &DLalpha_minus_u);
     caffe_axpy(DLalpha_minus_u.count(), Dtype(-1), dual_var.cpu_data(),
       DLalpha_minus_u.mutable_cpu_data());
     // slice reconstruction
     caffe_cpu_scale(slice.count(), Dtype(1./rho), bottom_patch.cpu_data(), slice.mutable_cpu_data());
     caffe_axpy(slice.count(), Dtype(1), DLalpha_minus_u.cpu_data(), slice.mutable_cpu_data());
     // slice aggregation
-    col2im_csc_cpu(slice.cpu_data(), bottom_shape[0], channels_,
-      bottom_shape[2], bottom_shape[3], kernel_h_, kernel_w_, boundary_,
-      bottom_recon.mutable_cpu_data());
+    this->aggregate_patches_cpu_(&slice, &bottom_recon);
     // slice update via local Laplacian, `dual_var` is only a temp variable
-    im2col_csc_cpu(bottom_recon.cpu_data(), bottom_shape[0], channels_, bottom_shape[2],
-      bottom_shape[3], kernel_h_, kernel_w_, boundary_, dual_var.mutable_cpu_data());
+    this->extract_patches_cpu_(&bottom_recon, &dual_var);
     caffe_axpy(slice.count(), Dtype(-1./(rho+patch_size)), dual_var.cpu_data(),
       slice.mutable_cpu_data());
     // dual variable update
@@ -113,8 +111,19 @@ void CSCLayer<Dtype>::Forward_cpu(const vector<Blob<Dtype>*>& bottom,
     // multiplier update
     rho = (rho*admm_eta_ > admm_max_rho_) ? admm_max_rho_ : rho*admm_eta_;
   }
-  // alpha is the output, simple do a copy
-  caffe_copy(top[0]->count(), alpha.cpu_data(), top[0]->mutable_cpu_data());
+  // reorder and copy to top blob
+  int patch_width = top[0]->shape(2)*top[0]->shape(3);
+  #ifdef _OPENMP
+  #pragma omp parallel for
+  #endif
+  for (int i = 0; i < top[0]->shape(0)*top[0]->shape(1); ++i) {
+    int n = i / channels_;
+    int c = i % channels_;
+    int alpha_from = c*top_patch_shape_[1] + n*patch_width;
+    int top_to = i * patch_width;
+    caffe_copy(patch_width, alpha.cpu_data() + alpha_from,
+      top[0]->mutable_cpu_data() + top_to);
+  }
 }
 
 template <typename Dtype>
@@ -182,6 +191,64 @@ void CSCLayer<Dtype>::Backward_cpu(const vector<Blob<Dtype>*>& top,
   if (propagate_down[0]) {
     caffe_copy(beta_recon.count(), beta_recon.cpu_data(), bottom[0]->mutable_cpu_diff());
   }
+}
+
+// TODO(leoyolo): naive impl
+template <typename Dtype>
+void CSCLayer<Dtype>::extract_patches_cpu_(const Blob<Dtype> *blob, Blob<Dtype> *patches) {
+  int patch_width = (boundary_ == CSCParameter::NOPAD) ?
+    (blob->shape(2)-kernel_h_+1) * (blob->shape(3)-kernel_w_+1) :
+    blob->shape(2) * blob->shape(3);
+  CHECK_EQ(patches->shape(0), channels_ * kernel_h_ * kernel_w_);
+  CHECK_EQ(patches->shape(1), blob->shape(0) * patch_width);
+  Blob<Dtype> patches_buffer(patches->shape());
+  im2col_csc_cpu(blob->cpu_data(), blob->shape(0), blob->shape(1), blob->shape(2),
+    blob->shape(3), kernel_h_, kernel_w_, boundary_, patches_buffer.mutable_cpu_data());
+  #ifdef _OPENMP
+  #pragma omp parallel for
+  #endif
+  for (int i = 0; i < blob->shape(0)*blob->shape(1); ++i) {
+    int n = i / channels_;
+    int c = i % channels_;
+    int source_offset = i * patch_width;
+    int target_offset = c * patches->shape(1) + n * patch_width;
+    caffe_copy(patch_width, patches_buffer.cpu_data() + source_offset,
+      patches->mutable_cpu_data() + target_offset);
+  }
+}
+
+// TODO(leoyolo): naive impl
+template <typename Dtype>
+void CSCLayer<Dtype>::aggregate_patches_cpu_(const Blob<Dtype> *patches, Blob<Dtype> *blob) {
+  int patch_width = (boundary_ == CSCParameter::NOPAD) ?
+    (blob->shape(2)-kernel_h_+1) * (blob->shape(3)-kernel_w_+1) :
+    blob->shape(2) * blob->shape(3);
+  CHECK_EQ(patches->shape(0), channels_ * kernel_h_ * kernel_w_);
+  CHECK_EQ(patches->shape(1), blob->shape(0) * patch_width);
+  Blob<Dtype> patches_buffer(patches->shape());
+  #ifdef _OPENMP
+  #pragma omp parallel for
+  #endif
+  for (int i = 0; i < blob->shape(0)*blob->shape(1); ++i) {
+    int n = i / channels_;
+    int c = i % channels_;
+    int source_offset = c * patches->shape(1) + n * patch_width;
+    int target_offset = i * patch_width;
+    caffe_copy(patch_width, patches->cpu_data() + source_offset,
+      patches_buffer.mutable_cpu_data() + target_offset);
+  }
+  col2im_csc_cpu(patches_buffer.cpu_data(), blob->shape(0), blob->shape(1), blob->shape(2),
+    blob->shape(3), kernel_h_, kernel_w_, boundary_, blob->mutable_cpu_data());
+}
+
+template <typename Dtype>
+void CSCLayer<Dtype>::gemm_Dlalpha_cpu_(const Blob<Dtype> *alpha, Blob<Dtype> *Dlalpha) {
+  CHECK_EQ(alpha->shape(0), this->blobs_[0]->shape(1));
+  CHECK_EQ(alpha->shape(1), Dlalpha->shape(1));
+  CHECK_EQ(Dlalpha->shape(0), this->blobs_[0]->shape(0));
+  caffe_cpu_gemm(CblasNoTrans, CblasNoTrans, this->blobs_[0]->shape(0), alpha->shape(1),
+    alpha->shape(0), Dtype(1), this->blobs_[0]->cpu_data(), alpha->cpu_data(), Dtype(0),
+    Dlalpha->mutable_cpu_data());
 }
 
 #ifdef CPU_ONLY

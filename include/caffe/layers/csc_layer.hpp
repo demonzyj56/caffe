@@ -44,6 +44,11 @@ class CSCLayer : public Layer<Dtype> {
   virtual void Backward_gpu(const vector<Blob<Dtype>*>& top,
       const vector<bool>& propagate_down, const vector<Blob<Dtype>*>& bottom);
 
+  // utilities
+  void extract_patches_cpu_(const Blob<Dtype> *blob, Blob<Dtype> *patches);
+  void aggregate_patches_cpu_(const Blob<Dtype> *patches, Blob<Dtype> *blob);
+  void gemm_Dlalpha_cpu_(const Blob<Dtype> *alpha, Blob<Dtype> *Dlalpha);
+
   // parameters
   Dtype lambda1_;
   Dtype lambda2_;
