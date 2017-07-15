@@ -87,7 +87,7 @@ TYPED_TEST(CSCLayerTest, TestBackwardSanity) {
   csc_param->mutable_filler()->set_mean(0.);
   csc_param->mutable_filler()->set_std(1.);
   vector<bool> propagate_down(1);
-  propagate_down[0] = false;
+  propagate_down[0] = true;
   shared_ptr<CSCLayer<Dtype> > layer(
     new CSCLayer<Dtype>(layer_param));
   layer->SetUp(this->blob_bottom_vec_, this->blob_top_vec_);
