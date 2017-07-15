@@ -13,7 +13,7 @@ template <typename Dtype>
 class CSCLocalInverseNaiveTest : public MultiDeviceTest<CPUDevice<Dtype> > {
  protected:
   CSCLocalInverseNaiveTest()
-      : m_(100), nnz_(3), lambda2_(0.5), DtD_(new Dtype[10000]), rhs_(new Dtype[3]),
+      : m_(100), nnz_(3), lambda2_(0.5), DtD_(new Dtype[10000]), rhs_(new Dtype[100]),
         index_(new int[3]), beta_(new Dtype[3]) {}
   virtual ~CSCLocalInverseNaiveTest() {
     delete[] DtD_;
@@ -25,14 +25,16 @@ class CSCLocalInverseNaiveTest : public MultiDeviceTest<CPUDevice<Dtype> > {
     this->index_[0] = 0;
     this->index_[1] = 1;
     this->index_[2] = 4;
-    this->rhs_[0] = 1.;
-    this->rhs_[1] = 2.;
-    this->rhs_[2] = 3.;
+    // this->rhs_[0] = 1.;
+    // this->rhs_[1] = 2.;
+    // this->rhs_[2] = 3.;
     caffe_set(this->m_*this->m_, Dtype(1), this->DtD_);
+    caffe_set(this->m_, Dtype(100), this->rhs_);
     for (int i = 0; i < this->nnz_; ++i) {
       for (int j = 0; j < this->nnz_; ++j) {
           this->DtD_[this->index_[i] * this->m_ + this->index_[j]] = Dtype(0);
       }
+      this->rhs_[this->index_[i]] = Dtype(i+1);
     }
   }
 

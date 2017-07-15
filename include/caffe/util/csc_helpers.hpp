@@ -94,7 +94,8 @@ void col2im_csc_cpu(const Dtype *patches, const int nsamples, const int channels
 // Utility function for solving the following problem:
 // (DtD + lambda2*I)beta = rhs.
 // Here DtD is truncated such that only entries in `index` is not zero.
-// rhs, index and beta all have length of nnz.
+// index and beta all have length of nnz.
+// rhs has a size of m.
 // WARNING: very naive implementation!
 template <typename Dtype>
 void csc_local_inverse_naive(const int m, const Dtype lambda2, const Dtype *DtD,

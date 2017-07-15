@@ -460,8 +460,9 @@ void csc_local_inverse_naive<float>(const int m, const float lambda2, const floa
         shrunk_ptr[i*nnz + j] += lambda2;
       }
     }
+    beta[i] = l[index[i]];
   }
-  caffe_copy(nnz, l, beta);
+  // caffe_copy(nnz, l, beta);
   int info = LAPACKE_spotrf(LAPACK_ROW_MAJOR, 'L', nnz, shrunk_ptr, nnz);
   CHECK_EQ(info, 0) << "Cholesky factorization is not successful!";
   // info = LAPACKE_spotrs(LAPACK_ROW_MAJOR, 'L', nnz, nnz, shrunk_ptr, nnz, beta, nnz);
@@ -483,8 +484,9 @@ void csc_local_inverse_naive<double>(const int m, const double lambda2, const do
         shrunk_ptr[i*nnz + j] += lambda2;
       }
     }
+    beta[i] = l[index[i]];
   }
-  caffe_copy(nnz, l, beta);
+  // caffe_copy(nnz, l, beta);
   int info = LAPACKE_dpotrf(LAPACK_ROW_MAJOR, 'L', nnz, shrunk_ptr, nnz);
   CHECK_EQ(info, 0) << "Cholesky factorization is not successful!";
   // info = LAPACKE_dpotrs(LAPACK_ROW_MAJOR, 'L', nnz, nnz, shrunk_ptr, nnz, beta, nnz);
