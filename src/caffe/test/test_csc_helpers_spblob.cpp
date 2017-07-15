@@ -125,4 +125,29 @@ TYPED_TEST(SpBlobTest, TestIndexAccess) {
   }
 }
 
+TYPED_TEST(SpBlobTest, TestColumnAccess) {
+  const TypeParam values[] = {1., -2., -4., -1., 5., 8., 4., 2., -3., 6., 7., 4., -5.};
+  const int rows[] = {0, 1, 3, 0, 1, 4, 2, 3, 0, 2, 3, 2, 4};
+  const int pB[] = {0, 3, 6, 8, 11};
+  const int pE[] = {3, 6, 8, 11, 13};
+  const TypeParam full_values[] = {1., -1., 0., -3., 0,
+                               -2., 5., 0., 0., 0.,
+                               0., 0., 4., 6., 4.,
+                               -4., 0., 2., 7., 0.,
+                                0., 8., 0., 0., -5.};
+  this->spblob2_->Reshape(13, 5, 5);
+  this->spblob2_->CopyFrom(values, rows, pB, pE);
+  for (int i = 0; i < 5; ++i) {
+    TypeParam *cols_data = this->spblob2_->values_at(i);
+    int *cols_index = this->spblob2_->rows_at(i);
+    int nrows = this->spblob2_->nnz_at(i);
+    for (int j = 0; j < nrows; ++j) {
+      TypeParam val = cols_data[j];
+      int r = cols_index[j];
+      EXPECT_EQ(val, full_values[r * 5 + i]);
+    }
+    
+  }
+}
+
 } // namespace caffe
