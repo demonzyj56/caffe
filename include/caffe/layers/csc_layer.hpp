@@ -68,7 +68,6 @@ class CSCLayer : public Layer<Dtype> {
   vector<int> top_patch_shape_;
   shared_ptr<Blob<Dtype> > alpha_;
   shared_ptr<SpBlob<Dtype> > spalpha_;
-  // SpBlob<Dtype> spalpha_;
 
 };
 

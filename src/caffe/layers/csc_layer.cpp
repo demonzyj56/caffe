@@ -21,7 +21,7 @@ void CSCLayer<Dtype>::LayerSetUp(const vector<Blob<Dtype>*>& bottom,
   admm_eta_ = static_cast<Dtype>(csc_param.admm_eta());
   lasso_lars_L_ = static_cast<int>(csc_param.lasso_lars_l());
   channels_ = bottom[0]->shape(1);
-  if (this->blobs_.size() > 0) {
+  if (!this->blobs_.empty()) {
     LOG(INFO) << "Skipping parameter initialization";
   } else {
     // dictionary is stored here
@@ -99,7 +99,8 @@ void CSCLayer<Dtype>::Forward_cpu(const vector<Blob<Dtype>*>& bottom,
     caffe_axpy(DLalpha_minus_u.count(), Dtype(-1), dual_var.cpu_data(),
       DLalpha_minus_u.mutable_cpu_data());
     // slice reconstruction
-    caffe_cpu_scale(slice.count(), Dtype(1./rho), bottom_patch.cpu_data(), slice.mutable_cpu_data());
+    caffe_cpu_scale(slice.count(), Dtype(1./rho), bottom_patch.cpu_data(),
+      slice.mutable_cpu_data());
     caffe_axpy(slice.count(), Dtype(1), DLalpha_minus_u.cpu_data(), slice.mutable_cpu_data());
     // slice aggregation
     this->aggregate_patches_cpu_(&slice, &bottom_recon);
@@ -147,16 +148,13 @@ void CSCLayer<Dtype>::Backward_cpu(const vector<Blob<Dtype>*>& top,
     bottom_patch_shape_[0], Dtype(1), this->blobs_[0]->cpu_data(),
     this->blobs_[0]->cpu_data(), Dtype(0), DtD.mutable_cpu_data());
   Blob<Dtype> residual(bottom_patch_shape_);
-  Blob<Dtype> bottom_recon(bottom[0]->shape());
   Blob<Dtype> Dlbeta(bottom_patch_shape_);
-  Blob<Dtype> beta_recon(bottom[0]->shape());
+  Blob<Dtype> beta(top_patch_shape_);
+  Blob<Dtype> bottom_recon(bottom[0]->shape());
   Blob<Dtype> dict_buffer(this->blobs_[0]->shape());
+  SpBlob<Dtype> &spbeta = *this->spalpha_;
   // solve rhs
   // use beta as buffer for top diff in patch view
-  // TODO(leoyolo): change spbeta to spalpha_
-  Blob<Dtype> beta(top_patch_shape_);
-  SpBlob<Dtype> spbeta;
-  spbeta.CopyFrom(this->spalpha_.get());
   int patch_width = top[0]->shape(2) * top[0]->shape(3);
   #ifdef _OPENMP
   #pragma omp parallel for
