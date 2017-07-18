@@ -1,0 +1,109 @@
+name: "CIFAR10_csc"
+layer {
+  name: "cifar"
+  type: "Data"
+  top: "data"
+  top: "label"
+  include {
+    phase: TRAIN
+  }
+  transform_param {
+    mean_file: "examples/cifar10/mean.binaryproto"
+  }
+  data_param {
+    shuffle: true
+    source: "examples/cifar10/cifar10_train_lmdb"
+    batch_size: 100
+    backend: LMDB
+  }
+}
+layer {
+  name: "cifar"
+  type: "Data"
+  top: "data"
+  top: "label"
+  include {
+    phase: TEST
+  }
+  transform_param {
+    mean_file: "examples/cifar10/mean.binaryproto"
+  }
+  data_param {
+    source: "examples/cifar10/cifar10_test_lmdb"
+    batch_size: 100
+    backend: LMDB
+  }
+}
+layer {
+  name: "csc"
+  type: "CSC"
+  bottom: "data"
+  top: "csc"
+  csc_param {
+    kernel_h: 6
+    kernel_w: 6
+    num_output: 1600
+    lasso_lars_L: 100
+    admm_max_iter: 1
+    admm_eta: 1
+    lambda1: 0.1
+    lambda2: 0.1
+    filler {
+        type: "gaussian"
+        std: 1
+    }
+    boundary: NOPAD
+  }
+}
+layer {
+  name: "pool"
+  type: "Pooling"
+  bottom: "csc"
+  top: "pool"
+  pooling_param {
+    pool: AVE
+    kernel_size: 14
+    stride: 13
+  }
+}
+layer {
+  name: "ip"
+  type: "InnerProduct"
+  bottom: "pool"
+  top: "ip"
+  param {
+    lr_mult: 1
+    decay_mult: 1
+  }
+  param {
+    lr_mult: 2
+    decay_mult: 0
+  }
+  inner_product_param {
+    num_output: 10
+    weight_filler {
+      type: "gaussian"
+      std: 0.01
+    }
+    bias_filler {
+      type: "constant"
+    }
+  }
+}
+layer {
+  name: "accuracy"
+  type: "Accuracy"
+  bottom: "ip"
+  bottom: "label"
+  top: "accuracy"
+  include {
+    phase: TEST
+  }
+}
+layer {
+  name: "loss"
+  type: "SoftmaxWithLoss"
+  bottom: "ip"
+  bottom: "label"
+  top: "loss"
+}
