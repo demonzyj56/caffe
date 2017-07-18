@@ -18,8 +18,8 @@ namespace caffe {
 template <typename Dtype>
 class SpBlob {
  public:
-  SpBlob()
-      : values_(), rows_(), pB_(), nnz_(0), capacity_(0), nrow_(0), ncol_(0) {}
+  SpBlob();
+      // : values_(), rows_(), pB_(), nnz_(0), capacity_(0), nrow_(0), ncol_(0) {}
   explicit SpBlob(int nnz0, int nrow0, int ncol0);
 
   void Reshape(int nnz0, int nrow0, int ncol0);

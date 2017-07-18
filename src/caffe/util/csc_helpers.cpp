@@ -14,6 +14,12 @@
 namespace caffe {
 
 template <typename Dtype>
+SpBlob<Dtype>::SpBlob()
+  : values_(new SyncedMemory()), rows_(new SyncedMemory()), pB_(new SyncedMemory()), 
+    nnz_(0), capacity_(0), nrow_(0), ncol_(0) {
+}
+
+template <typename Dtype>
 void SpBlob<Dtype>::Reshape(int nnz0, int nrow0, int ncol0) {
   nnz_ = nnz0;
   nrow_ = nrow0;
@@ -181,6 +187,7 @@ void lasso_cpu(const Blob<Dtype> *X, const Blob<Dtype> *D, Dtype lambda1, Dtype 
     LOG(FATAL) << err;
   }
   CHECK(alpha_spmat);
+  LOG(INFO) << "[cppLasso] alpha_spmat shape: " << "nnz: " << alpha_spmat->nnz() << "\n";
   // copy to Matrix and then to Blob
   alpha_spmat->toFullTrans(alpha_mat);
   caffe_copy(alpha->count(), alpha_mat.X(), alpha->mutable_cpu_data());
