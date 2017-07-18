@@ -5,6 +5,7 @@
 #include "caffe/util/math_functions.hpp"
 #include "caffe/util/csc_helpers.hpp"
 #include "spams/cpp_library/cppspams.h"
+#include "caffe/util/benchmark.hpp"
 
 #ifdef USE_MKL
 #include <mkl_trans.h>
@@ -165,6 +166,7 @@ INSTANTIATE_CLASS(SpBlob);
 template <typename Dtype>
 void lasso_cpu(const Blob<Dtype> *X, const Blob<Dtype> *D, Dtype lambda1, Dtype lambda2,
       int L, Blob<Dtype> *alpha, SpBlob<Dtype> *spalpha) {
+  CPUTimer timer;
   CHECK_EQ(X->num_axes(), 2) << "Only 2D blob is allowed.";
   CHECK_EQ(D->num_axes(), 2) << "Only 2D blob is allowed.";
   CHECK_EQ(alpha->num_axes(), 2) << "Only 2D blob is allowed.";
@@ -180,6 +182,7 @@ void lasso_cpu(const Blob<Dtype> *X, const Blob<Dtype> *D, Dtype lambda1, Dtype 
     D->shape(0), D->shape(1));
   Matrix<Dtype> alpha_mat;
   SpMatrix<Dtype> *alpha_spmat = NULL;
+  timer.Start();
   try {
     Matrix<Dtype> *null_path_ptr = NULL;
     alpha_spmat = cppLasso(X_mat, D_mat, &null_path_ptr, false, L, lambda1, lambda2);
@@ -187,7 +190,12 @@ void lasso_cpu(const Blob<Dtype> *X, const Blob<Dtype> *D, Dtype lambda1, Dtype 
     LOG(FATAL) << err;
   }
   CHECK(alpha_spmat);
+  LOG(INFO) << "[cppLasso] elapsed time: " << timer.Seconds() << "\n";
   LOG(INFO) << "[cppLasso] alpha_spmat shape: " << "nnz: " << alpha_spmat->nnz() << "\n";
+  LOG(INFO) << "[cppLasso] Sparsity: "
+    << 1. - static_cast<Dtype>(alpha_spmat->nnz())/alpha_spmat->m()/alpha_spmat->n() << "\n";
+  LOG(INFO) << "[cppLasso] nnz per column: " 
+    << static_cast<Dtype>(alpha_spmat->nnz())/alpha_spmat->n() << "\n";
   // copy to Matrix and then to Blob
   alpha_spmat->toFullTrans(alpha_mat);
   caffe_copy(alpha->count(), alpha_mat.X(), alpha->mutable_cpu_data());

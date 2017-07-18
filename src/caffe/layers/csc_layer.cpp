@@ -3,6 +3,7 @@
 #include "caffe/filler.hpp"
 #include "caffe/layers/csc_layer.hpp"
 #include "caffe/util/csc_helpers.hpp"
+#include "caffe/util/benchmark.hpp"
 
 namespace caffe {
 
@@ -76,6 +77,8 @@ void CSCLayer<Dtype>::Reshape(const vector<Blob<Dtype>*>& bottom,
 template <typename Dtype>
 void CSCLayer<Dtype>::Forward_cpu(const vector<Blob<Dtype>*>& bottom,
       const vector<Blob<Dtype>*>& top) {
+  CPUTimer timer;
+  timer.Start();
   const vector<int> &bottom_shape = bottom[0]->shape();
   int patch_size = channels_ * kernel_h_ * kernel_w_;
   // initialize bottom_patch
@@ -127,6 +130,7 @@ void CSCLayer<Dtype>::Forward_cpu(const vector<Blob<Dtype>*>& bottom,
     caffe_copy(patch_width, this->alpha_->cpu_data() + alpha_from,
       top[0]->mutable_cpu_data() + top_to);
   }
+  LOG(INFO) << "Forward time: " << timer.Seconds() << "s\n";
 }
 
 /*
