@@ -15,7 +15,8 @@ class CSCLayerTest : public MultiDeviceTest<TypeParam> {
   CSCLayerTest()
       : blob_bottom_(new Blob<Dtype>(10, 3, 32, 32)), blob_top_(new Blob<Dtype>()) {
     FillerParameter filler_param;
-    UniformFiller<Dtype> filler(filler_param);
+    GaussianFiller<Dtype> filler(filler_param);
+    // UniformFiller<Dtype> filler(filler_param);
     filler.Fill(this->blob_bottom_);
     this->blob_bottom_vec_.push_back(blob_bottom_);
     this->blob_top_vec_.push_back(blob_top_);
@@ -62,10 +63,13 @@ TYPED_TEST(CSCLayerTest, TestForwardSanity) {
   typedef typename TypeParam::Dtype Dtype;
   LayerParameter layer_param;
   CSCParameter * csc_param = layer_param.mutable_csc_param();
+  csc_param->set_lambda1(1e-2);
+  csc_param->set_lambda2(1.);
+  csc_param->set_admm_eta(1.1);
   csc_param->set_kernel_h(6);
   csc_param->set_kernel_w(6);
   csc_param->set_num_output(1600);
-  csc_param->set_admm_max_iter(1);
+  csc_param->set_admm_max_iter(100);
   csc_param->mutable_filler()->set_type("gaussian");
   csc_param->mutable_filler()->set_mean(0.);
   csc_param->mutable_filler()->set_std(1.);
@@ -74,7 +78,7 @@ TYPED_TEST(CSCLayerTest, TestForwardSanity) {
   layer->SetUp(this->blob_bottom_vec_, this->blob_top_vec_);
   layer->Forward(this->blob_bottom_vec_, this->blob_top_vec_);
 }
-
+/*
 TYPED_TEST(CSCLayerTest, TestBackwardSanity) {
   typedef typename TypeParam::Dtype Dtype;
   LayerParameter layer_param;
@@ -96,5 +100,5 @@ TYPED_TEST(CSCLayerTest, TestBackwardSanity) {
     this->blob_bottom_vec_);
 
 }
-
+*/
 } // namespace caffe
