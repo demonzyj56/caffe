@@ -509,4 +509,15 @@ void csc_local_inverse_naive<double>(const int m, const double lambda2, const do
   CHECK_EQ(info, 0) << "Solving linear system is not successful!";
 }
 
+// TODO(leoyolo): naive impl
+template <typename Dtype>
+void caffe_cpu_soft_thresholding(const int n, const Dtype thresh, Dtype *x) {
+  for (int i = 0; i < n; ++i) {
+      x[i] = (x[i] > thresh) ? x[i] - thresh :
+        (x[i] < -thresh ? x[i] + thresh : 0.);
+  }
+}
+template void caffe_cpu_soft_thresholding<float>(const int n, const float thresh, float *x);
+template void caffe_cpu_soft_thresholding<double>(const int n, const double thresh, double *x);
+
 } // namespace caffe
