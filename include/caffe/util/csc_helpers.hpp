@@ -140,6 +140,9 @@ template void aggregate_patches<float>(const Blob<float> *patches, int kernel_h,
 template void aggregate_patches<double>(const Blob<double> *patches, int kernel_h, int kernel_w,
     CSCParameter::Boundary boundary, Blob<double> *blob);
  
+// soft thresholding for fista
+template <typename Dtype>
+void caffe_cpu_soft_thresholding(const int n, const Dtype thresh, Dtype *x);
 
 } // namespace caffe
 
