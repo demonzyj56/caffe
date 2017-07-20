@@ -143,60 +143,97 @@ void CSCLayer<Dtype>::Forward_cpu(const vector<Blob<Dtype>*>& bottom,
   Blob<Dtype> grad(top_patch_shape_);
   Blob<Dtype> bottom_recon(bottom_shape);
   Blob<Dtype> alpha_diff(top_patch_shape_);
+  Blob<Dtype> beta(top_patch_shape_);
   Dtype loss = bottom[0]->sumsq_data()/2. + this->alpha_->sumsq_data()*lambda2_/2.;
   Dtype eta = Dtype(1);
+  Dtype t = 1;
   this->extract_patches_cpu_(bottom[0], &bottom_patch);
   caffe_set(alpha.count(), Dtype(0), alpha.mutable_cpu_data());
+  caffe_set(beta.count(), Dtype(0), beta.mutable_cpu_data());
   caffe_cpu_gemm(CblasTrans, CblasNoTrans, this->blobs_[0]->shape(1),
     bottom_patch.shape(1), this->blobs_[0]->shape(0), Dtype(-1),
     this->blobs_[0]->cpu_data(), bottom_patch.cpu_data(), Dtype(0),
     grad.mutable_cpu_data());
   caffe_axpy(grad.count(), lambda2_, this->alpha_->cpu_data(), grad.mutable_cpu_data());
-  for (int t = 0; t < admm_max_iter_; ++t) {
+  for (int tt = 0; tt < admm_max_iter_; ++tt) {
     while (true) {
+      CPUTimer total_timer;
+      total_timer.Start();
       caffe_copy(alpha.count(), this->alpha_->cpu_data(), alpha.mutable_cpu_data());
       caffe_axpy(alpha.count(), Dtype(-1./eta), grad.cpu_data(),
         alpha.mutable_cpu_data());
       caffe_cpu_soft_thresholding(alpha.count(), Dtype(lambda1_/eta),
         alpha.mutable_cpu_data());
+      CPUTimer timer;
+      timer.Start();
       caffe_cpu_gemm(CblasNoTrans, CblasNoTrans, this->blobs_[0]->shape(0),
         alpha.shape(1), this->blobs_[0]->shape(1), Dtype(1),
         this->blobs_[0]->cpu_data(), alpha.cpu_data(), Dtype(0),
         bottom_patch.mutable_cpu_data());
+      timer.Stop();
       this->aggregate_patches_cpu_(&bottom_patch, &bottom_recon);
       caffe_sub(bottom[0]->count(), bottom[0]->cpu_data(), bottom_recon.cpu_data(),
         bottom_recon.mutable_cpu_data());
-      // std::cout << "bottom_recon: " << bottom_recon.sumsq_data()/2.
-      //   << " alpha: " << alpha.sumsq_data()*lambda2_/2 << "\n";
       Dtype loss_new = bottom_recon.sumsq_data()/2. + alpha.sumsq_data()*lambda2_/2.;
       caffe_sub(alpha.count(), alpha.cpu_data(), this->alpha_->cpu_data(),
         alpha_diff.mutable_cpu_data());
       Dtype stop = loss + caffe_cpu_dot(alpha_diff.count(), grad.cpu_data(),
         alpha_diff.cpu_data()) + alpha_diff.sumsq_data()*eta/2. - loss_new;
-      std::cout << "[CSCLayer] stop: " << stop << " eta: " << eta << "\n";
-      // std::cout << "loss_new: " << loss_new << "\n";
+      std::cout 
+        // << "Aggregation time: " << timer.Seconds()
+        // << " Total time: " << total_timer.Seconds()
+        << " Stop: " << stop << " eta: " << eta
+        << " obj: " << loss + lambda1_*alpha.asum_data()
+        << " sparsity: " << 
+          1.-(Dtype)caffe_cpu_zero_norm(this->alpha_->count(), this->alpha_->cpu_data())/alpha_->count()
+        << std::endl;
       if (stop >= 0) {
-        loss = loss_new;
+        // loss = loss_new;
+        // this->extract_patches_cpu_(&bottom_recon, &bottom_patch);
+        // caffe_cpu_gemm(CblasTrans, CblasNoTrans, this->blobs_[0]->shape(1),
+        //   bottom_patch.shape(1), this->blobs_[0]->shape(0), Dtype(-1),
+        //   this->blobs_[0]->cpu_data(), bottom_patch.cpu_data(), Dtype(0),
+        //   grad.mutable_cpu_data());
+        // caffe_axpy(grad.count(), lambda2_, alpha.cpu_data(), grad.mutable_cpu_data());
+        // caffe_copy(alpha.count(), alpha.cpu_data(), this->alpha_->mutable_cpu_data());
+        // break;
+        Dtype t_new = (1 + std::sqrt(1+4*t*t)) / 2.;
+        Dtype coeff = (t-1) / t_new;
+        caffe_copy(alpha.count(), alpha.cpu_data(), this->alpha_->mutable_cpu_data());
+        caffe_cpu_axpby(this->alpha_->count(), Dtype(-coeff), beta.cpu_data(),
+          Dtype(1.+coeff), this->alpha_->mutable_cpu_data());
+        caffe_copy(alpha.count(), alpha.cpu_data(), beta.mutable_cpu_data());
+        t = t_new;
+        this->gemm_Dlalpha_cpu_(this->alpha_.get(), &bottom_patch);
+        this->aggregate_patches_cpu_(&bottom_patch, &bottom_recon);
+        caffe_sub(bottom_recon.count(), bottom[0]->cpu_data(), bottom_recon.cpu_data(),
+          bottom_recon.mutable_cpu_data());
+        loss = bottom_recon.sumsq_data()/2. + this->alpha_->sumsq_data()*lambda2_/2.;
         this->extract_patches_cpu_(&bottom_recon, &bottom_patch);
         caffe_cpu_gemm(CblasTrans, CblasNoTrans, this->blobs_[0]->shape(1),
           bottom_patch.shape(1), this->blobs_[0]->shape(0), Dtype(-1),
           this->blobs_[0]->cpu_data(), bottom_patch.cpu_data(), Dtype(0),
           grad.mutable_cpu_data());
-        caffe_axpy(grad.count(), lambda2_, alpha.cpu_data(), grad.mutable_cpu_data());
-        caffe_copy(alpha.count(), alpha.cpu_data(), this->alpha_->mutable_cpu_data());
-        break;
+        caffe_axpy(grad.count(), lambda2_, this->alpha_->cpu_data(),
+          grad.mutable_cpu_data());
+        break; 
       }
       eta *= admm_eta_;
     }
   }
   int patch_width = top[0]->shape(2)*top[0]->shape(3);
+  #ifdef _OPENMP
+  #pragma omp parallel for
+  #endif
   for (int i = 0; i < top[0]->shape(0)*top[0]->shape(1); ++i) {
     int n = i / num_output_;
     int c = i % num_output_;
     int alpha_from = c*top_patch_shape_[1] + n*patch_width;
     int top_to = i * patch_width;
-    caffe_copy(patch_width, this->alpha_->cpu_data() + alpha_from,
+    caffe_copy(patch_width, beta.cpu_data() + alpha_from,
       top[0]->mutable_cpu_data() + top_to);
+    // caffe_copy(patch_width, this->alpha_->cpu_data() + alpha_from,
+    //   top[0]->mutable_cpu_data() + top_to);
   }
 }
 
@@ -206,12 +243,13 @@ void CSCLayer<Dtype>::Forward_cpu(const vector<Blob<Dtype>*>& bottom,
  * 2) Compute first part of derivative
  * 3) Compute second part of derivative
  * */
+/*
 template <typename Dtype>
 void CSCLayer<Dtype>::Backward_cpu(const vector<Blob<Dtype>*>& top,
       const vector<bool>& propagate_down,
       const vector<Blob<Dtype>*>& bottom) {
-  CPUTimer timer;
-  timer.Start();
+  // CPUTimer timer;
+  // timer.Start();
   // construct DtD
   vector<int> DtD_shape(2);
   DtD_shape[0] = num_output_;
@@ -240,13 +278,13 @@ void CSCLayer<Dtype>::Backward_cpu(const vector<Blob<Dtype>*>& top,
     caffe_copy(patch_width, top[0]->cpu_data() + offset_from,
       beta.mutable_cpu_data() + offset_to);
   }
-  CPUTimer other_timer;
-  other_timer.Start();
+  // CPUTimer other_timer;
+  // other_timer.Start();
   caffe_cpu_imatcopy(beta.shape(0), beta.shape(1), beta.mutable_cpu_data());
-  LOG(INFO) << "Others time: " << other_timer.Seconds() << "s\n";
+  // LOG(INFO) << "Others time: " << other_timer.Seconds() << "s\n";
   if (this->param_propagate_down_[0]) {
-    CPUTimer inverse_timer;
-    inverse_timer.Start();
+    // CPUTimer inverse_timer;
+    // inverse_timer.Start();
     // solve beta
     for (int i  = 0; i < spbeta.ncol(); ++i) {
       Dtype *rhs = beta.mutable_cpu_data() + i * num_output_;
@@ -256,7 +294,7 @@ void CSCLayer<Dtype>::Backward_cpu(const vector<Blob<Dtype>*>& top,
       csc_local_inverse_naive(num_output_, lambda2_, DtD.mutable_cpu_data(),
         rhs, index, nnz, lhs);
     }
-    LOG(INFO) << "Matrix inverse time: " << inverse_timer.Seconds() << "s\n";
+    // LOG(INFO) << "Matrix inverse time: " << inverse_timer.Seconds() << "s\n";
     spbeta.ToFull(&beta);
     //first term
     this->gemm_Dlalpha_cpu_(this->alpha_.get(), &Dlbeta);
@@ -283,7 +321,75 @@ void CSCLayer<Dtype>::Backward_cpu(const vector<Blob<Dtype>*>& top,
     caffe_copy(bottom[0]->count(), bottom_recon.cpu_data(),
       bottom[0]->mutable_cpu_diff());
   }
-  LOG(INFO) << "Backward time: " << timer.Seconds() << "s\n";
+  // LOG(INFO) << "Backward time: " << timer.Seconds() << "s\n";
+}
+*/
+
+template <typename Dtype>
+void CSCLayer<Dtype>::Backward_cpu(const vector<Blob<Dtype>*>& top,
+      const vector<bool>& propagate_down,
+      const vector<Blob<Dtype>*>& bottom) {
+  vector<int> DtD_shape(2);
+  DtD_shape[0] = num_output_;
+  DtD_shape[1] = num_output_;
+  Blob<Dtype> DtD(DtD_shape);
+  caffe_cpu_gemm(CblasTrans, CblasNoTrans, num_output_, num_output_,
+    bottom_patch_shape_[0], Dtype(1), this->blobs_[0]->cpu_data(),
+    this->blobs_[0]->cpu_data(), Dtype(0), DtD.mutable_cpu_data());
+  Blob<Dtype> residual(bottom_patch_shape_);
+  Blob<Dtype> Dlbeta(bottom_patch_shape_);
+  Blob<Dtype> beta(top_patch_shape_);
+  Blob<Dtype> bottom_recon(bottom[0]->shape());
+  Blob<Dtype> dict_buffer(this->blobs_[0]->shape());
+  SpBlob<Dtype> &spbeta = *this->spalpha_;
+  // solve rhs
+  // use beta as buffer for top diff in patch view
+  int patch_width = top[0]->shape(2) * top[0]->shape(3);
+  for (int i = 0; i < top[0]->shape(0)*top[0]->shape(1); ++i) {
+    int n = i / num_output_;
+    int c = i % num_output_;
+    int offset_from = i * patch_width;
+    int offset_to = c*top_patch_shape_[1] + n * patch_width;
+    caffe_copy(patch_width, top[0]->cpu_data() + offset_from,
+      beta.mutable_cpu_data() + offset_to);
+  }
+  caffe_cpu_imatcopy(beta.shape(0), beta.shape(1), beta.mutable_cpu_data());
+  if (this->param_propagate_down_[0]) {
+    // solve beta
+    for (int i  = 0; i < spbeta.ncol(); ++i) {
+      Dtype *rhs = beta.mutable_cpu_data() + i * num_output_;
+      int *index = spbeta.rows_at(i);
+      int nnz = spbeta.nnz_at(i);
+      Dtype *lhs = spbeta.values_at(i);
+      csc_local_inverse_naive(num_output_, lambda2_, DtD.mutable_cpu_data(),
+        rhs, index, nnz, lhs);
+    }
+    spbeta.ToFull(&beta);
+    //first term
+    this->gemm_Dlalpha_cpu_(this->alpha_.get(), &Dlbeta);
+    this->aggregate_patches_cpu_(&Dlbeta, &bottom_recon);
+    caffe_sub(bottom[0]->count(), bottom[0]->cpu_data(), bottom_recon.cpu_data(),
+      bottom_recon.mutable_cpu_data());
+    this->extract_patches_cpu_(&bottom_recon, &residual);
+    caffe_cpu_gemm(CblasNoTrans, CblasTrans, residual.shape(0), beta.shape(0), 
+      residual.shape(1), Dtype(1), residual.cpu_data(), beta.cpu_data(),
+      Dtype(0), this->blobs_[0]->mutable_cpu_diff());
+    //second term
+    this->gemm_Dlalpha_cpu_(&beta, &Dlbeta);
+    this->aggregate_patches_cpu_(&Dlbeta, &bottom_recon);
+    this->extract_patches_cpu_(&bottom_recon, &residual);
+    caffe_cpu_gemm(CblasNoTrans, CblasTrans, residual.shape(0), this->alpha_->shape(0),
+      residual.shape(1), Dtype(1), residual.cpu_data(), this->alpha_->cpu_data(),
+      Dtype(0), dict_buffer.mutable_cpu_data());
+    caffe_axpy(this->blobs_[0]->count(), Dtype(-1), dict_buffer.cpu_data(),
+      this->blobs_[0]->mutable_cpu_diff());
+    caffe_scal(this->blobs_[0]->count(), Dtype(1./bottom[0]->shape(0)),
+      this->blobs_[0]->mutable_cpu_diff());
+  }
+  if (propagate_down[0]) {
+    caffe_copy(bottom[0]->count(), bottom_recon.cpu_data(),
+      bottom[0]->mutable_cpu_diff());
+  }
 }
 
 // TODO(leoyolo): naive impl
