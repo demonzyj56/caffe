@@ -512,6 +512,9 @@ void csc_local_inverse_naive<double>(const int m, const double lambda2, const do
 // TODO(leoyolo): naive impl
 template <typename Dtype>
 void caffe_cpu_soft_thresholding(const int n, const Dtype thresh, Dtype *x) {
+  #ifdef _OPENMP
+  #pragma omp parallel for
+  #endif
   for (int i = 0; i < n; ++i) {
       x[i] = (x[i] > thresh) ? x[i] - thresh :
         (x[i] < -thresh ? x[i] + thresh : 0.);
@@ -519,5 +522,93 @@ void caffe_cpu_soft_thresholding(const int n, const Dtype thresh, Dtype *x) {
 }
 template void caffe_cpu_soft_thresholding<float>(const int n, const float thresh, float *x);
 template void caffe_cpu_soft_thresholding<double>(const int n, const double thresh, double *x);
+
+template <typename Dtype>
+int caffe_cpu_zero_norm(const int n, const Dtype *x) {
+  int sum = 0;
+  Dtype tol = 1e-6;
+  for (int i = 0; i < n; ++i) {
+    sum += (std::fabs(x[i]) >= tol);
+  }
+  return sum;
+}
+
+template int caffe_cpu_zero_norm<float>(const int n, const float *x);
+template int caffe_cpu_zero_norm<double>(const int n, const double *x);
+
+
+template <>
+void sparse_inverse<float>(const float lambda2, const Blob<float> *Dl,
+      Blob<float> *beta) {
+  int num_output = Dl->shape(1);
+  CHECK_EQ(num_output, beta->shape(0));
+  vector<int> dtd_shape(2);
+  dtd_shape[0] = num_output;
+  dtd_shape[1] = num_output;
+  Blob<float> dtd(dtd_shape);
+  Blob<float> dtd_copy(dtd_shape);
+  float *dtd_copy_ptr = dtd_copy.mutable_cpu_data();
+  caffe_cpu_gemm(CblasTrans, CblasNoTrans, num_output, num_output,
+    Dl->shape(0), float(1), Dl->cpu_data(), Dl->cpu_data(), float(0),
+    dtd.mutable_cpu_data());
+  float *beta_data = beta->mutable_cpu_data();
+  float *beta_diff = beta->mutable_cpu_diff();
+  for (int i = 0; i < beta->shape(1); ++i) {
+    if (i % 1000 == 0) {
+      std::cout << "Working on " << i << "/" << beta->shape(1) << " iterations\n";
+    }
+    caffe_copy(dtd.count(), dtd.cpu_data(), dtd_copy.mutable_cpu_data());
+    for (int j = 0; j < num_output; ++j) {
+      if (std::fabs(beta_data[j*beta->shape(1)+i]) < 1e-6) {
+        for (int k = 0; k < num_output; ++k) {
+          dtd_copy_ptr[j * num_output + k] = float(0.);
+          dtd_copy_ptr[k * num_output + j] = float(0.);
+        }
+      }
+      dtd_copy_ptr[j * num_output + j] += lambda2;
+    }
+    int info = LAPACKE_spotrf(LAPACK_ROW_MAJOR, 'L', num_output,
+      dtd_copy_ptr, num_output);
+    CHECK_EQ(info, 0);
+    info = LAPACKE_spotrs(LAPACK_ROW_MAJOR, 'L', num_output, 1,
+      dtd_copy_ptr, num_output, beta_diff + i, beta->shape(1));
+    CHECK_EQ(info, 0);
+  }
+}
+template <>
+void sparse_inverse<double>(const double lambda2, const Blob<double> *Dl,
+      Blob<double> *beta) {
+  int num_output = Dl->shape(1);
+  CHECK_EQ(num_output, beta->shape(0));
+  vector<int> dtd_shape(2);
+  dtd_shape[0] = num_output;
+  dtd_shape[1] = num_output;
+  Blob<double> dtd(dtd_shape);
+  Blob<double> dtd_copy(dtd_shape);
+  double *dtd_copy_ptr = dtd_copy.mutable_cpu_data();
+  caffe_cpu_gemm(CblasTrans, CblasNoTrans, num_output, num_output,
+    Dl->shape(0), double(1), Dl->cpu_data(), Dl->cpu_data(), double(0),
+    dtd.mutable_cpu_data());
+  double *beta_data = beta->mutable_cpu_data();
+  double *beta_diff = beta->mutable_cpu_diff();
+  for (int i = 0; i < beta->shape(1); ++i) {
+    caffe_copy(dtd.count(), dtd.cpu_data(), dtd_copy.mutable_cpu_data());
+    for (int j = 0; j < num_output; ++j) {
+      if (std::fabs(beta_data[j*beta->shape(1)+i]) < 1e-6) {
+        for (int k = 0; k < num_output; ++k) {
+          dtd_copy_ptr[j * num_output + k] = double(0.);
+          dtd_copy_ptr[k * num_output + j] = double(0.);
+        }
+      }
+      dtd_copy_ptr[j * num_output + j] += lambda2;
+    }
+    int info = LAPACKE_dpotrf(LAPACK_ROW_MAJOR, 'L', num_output,
+      dtd_copy_ptr, num_output);
+    CHECK_EQ(info, 0);
+    info = LAPACKE_dpotrs(LAPACK_ROW_MAJOR, 'L', num_output, 1,
+      dtd_copy_ptr, num_output, beta_diff + i, beta->shape(1));
+    CHECK_EQ(info, 0);
+  }
+}
 
 } // namespace caffe

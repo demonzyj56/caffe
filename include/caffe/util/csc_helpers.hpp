@@ -144,6 +144,14 @@ template void aggregate_patches<double>(const Blob<double> *patches, int kernel_
 template <typename Dtype>
 void caffe_cpu_soft_thresholding(const int n, const Dtype thresh, Dtype *x);
 
+// zero norm
+template <typename Dtype>
+int caffe_cpu_zero_norm(const int n, const Dtype *x);
+
+// compute inverse for our need
+template <typename Dtype>
+void sparse_inverse(const Dtype lambda2, const Blob<Dtype> *Dl, Blob<Dtype> *beta);
+
 } // namespace caffe
 
 #endif // CAFFE_CSC_HELPERS_HPP_

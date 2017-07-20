@@ -47,7 +47,10 @@ class CSCLayer : public Layer<Dtype> {
   // utilities
   void extract_patches_cpu_(const Blob<Dtype> *blob, Blob<Dtype> *patches);
   void aggregate_patches_cpu_(const Blob<Dtype> *patches, Blob<Dtype> *blob);
-  void gemm_Dlalpha_cpu_(const Blob<Dtype> *alpha, Blob<Dtype> *Dlalpha);
+  void gemm_Dlalpha_cpu_(const Blob<Dtype> *alpha, Blob<Dtype> *Dlalpha,
+      bool prefer_data);
+  void permute_num_channels_(const Blob<Dtype> *top, Blob<Dtype> *patches,
+      bool permute_diff);
 
   // parameters
   Dtype lambda1_;
