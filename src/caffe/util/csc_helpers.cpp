@@ -536,7 +536,6 @@ int caffe_cpu_zero_norm(const int n, const Dtype *x) {
 template int caffe_cpu_zero_norm<float>(const int n, const float *x);
 template int caffe_cpu_zero_norm<double>(const int n, const double *x);
 
-
 template <>
 void sparse_inverse<float>(const float lambda2, const Blob<float> *Dl,
       Blob<float> *beta) {
@@ -553,17 +552,25 @@ void sparse_inverse<float>(const float lambda2, const Blob<float> *Dl,
     dtd.mutable_cpu_data());
   float *beta_data = beta->mutable_cpu_data();
   float *beta_diff = beta->mutable_cpu_diff();
+  CPUTimer timer;
+  timer.Start();
   for (int i = 0; i < beta->shape(1); ++i) {
     if (i % 1000 == 0) {
-      std::cout << "Working on " << i << "/" << beta->shape(1) << " iterations\n";
+      std::cout << "Working on " << i << "/" << beta->shape(1) << " iterations"
+        << " elapsed time: " << timer.Seconds() << "s\n";
+      timer.Start();
     }
     caffe_copy(dtd.count(), dtd.cpu_data(), dtd_copy.mutable_cpu_data());
+    #ifdef _OPENMP
+    #pragma omp parallel for
+    #endif
     for (int j = 0; j < num_output; ++j) {
       if (std::fabs(beta_data[j*beta->shape(1)+i]) < 1e-6) {
         for (int k = 0; k < num_output; ++k) {
           dtd_copy_ptr[j * num_output + k] = float(0.);
           dtd_copy_ptr[k * num_output + j] = float(0.);
         }
+        beta_diff[j*beta->shape(1)+i] = float(0.);
       }
       dtd_copy_ptr[j * num_output + j] += lambda2;
     }
@@ -599,6 +606,7 @@ void sparse_inverse<double>(const double lambda2, const Blob<double> *Dl,
           dtd_copy_ptr[j * num_output + k] = double(0.);
           dtd_copy_ptr[k * num_output + j] = double(0.);
         }
+        beta_diff[j*beta->shape(1)+i] = double(0.);
       }
       dtd_copy_ptr[j * num_output + j] += lambda2;
     }

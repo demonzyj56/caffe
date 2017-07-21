@@ -13,7 +13,7 @@ class CSCLayerTest : public MultiDeviceTest<TypeParam> {
   typedef typename TypeParam::Dtype Dtype;
  protected:
   CSCLayerTest()
-      : blob_bottom_(new Blob<Dtype>(10, 3, 32, 32)), blob_top_(new Blob<Dtype>()) {
+      : blob_bottom_(new Blob<Dtype>(100, 3, 32, 32)), blob_top_(new Blob<Dtype>()) {
     FillerParameter filler_param;
     GaussianFiller<Dtype> filler(filler_param);
     // UniformFiller<Dtype> filler(filler_param);
@@ -49,7 +49,7 @@ TYPED_TEST(CSCLayerTest, TestSetUp) {
     new CSCLayer<Dtype>(layer_param));
   layer->SetUp(this->blob_bottom_vec_, this->blob_top_vec_);
   vector<shared_ptr<Blob<Dtype> > > &blobs = layer->blobs();
-  EXPECT_EQ(this->blob_top_->num(), 10);
+  EXPECT_EQ(this->blob_top_->num(), 100);
   EXPECT_EQ(this->blob_top_->channels(), 1600);
   EXPECT_EQ(this->blob_top_->height(), 27);
   EXPECT_EQ(this->blob_top_->width(), 27);
@@ -63,13 +63,13 @@ TYPED_TEST(CSCLayerTest, TestForwardSanity) {
   typedef typename TypeParam::Dtype Dtype;
   LayerParameter layer_param;
   CSCParameter * csc_param = layer_param.mutable_csc_param();
-  csc_param->set_lambda1(1e-2);
+  csc_param->set_lambda1(1);
   csc_param->set_lambda2(1.);
   csc_param->set_admm_eta(1.5);
   csc_param->set_kernel_h(6);
   csc_param->set_kernel_w(6);
   csc_param->set_num_output(1600);
-  csc_param->set_admm_max_iter(1);
+  csc_param->set_admm_max_iter(10);
   csc_param->mutable_filler()->set_type("gaussian");
   csc_param->mutable_filler()->set_mean(0.);
   csc_param->mutable_filler()->set_std(1.);
@@ -83,13 +83,13 @@ TYPED_TEST(CSCLayerTest, TestBackwardSanity) {
   typedef typename TypeParam::Dtype Dtype;
   LayerParameter layer_param;
   CSCParameter * csc_param = layer_param.mutable_csc_param();
-  csc_param->set_lambda1(1e-2);
+  csc_param->set_lambda1(1);
   csc_param->set_lambda2(1.);
+  csc_param->set_admm_eta(1.5);
   csc_param->set_kernel_h(6);
   csc_param->set_kernel_w(6);
   csc_param->set_num_output(1600);
-  csc_param->set_admm_max_iter(1);
-  csc_param->set_admm_eta(1.5);
+  csc_param->set_admm_max_iter(10);
   csc_param->mutable_filler()->set_type("gaussian");
   csc_param->mutable_filler()->set_mean(0.);
   csc_param->mutable_filler()->set_std(1.);
