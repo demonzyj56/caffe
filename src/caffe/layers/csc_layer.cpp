@@ -145,8 +145,7 @@ void CSCLayer<Dtype>::Forward_cpu(const vector<Blob<Dtype>*>& bottom,
   Blob<Dtype> alpha_diff(top_patch_shape_);
   Blob<Dtype> beta(top_patch_shape_);
   Dtype loss = bottom[0]->sumsq_data()/2. + this->alpha_->sumsq_data()*lambda2_/2.;
-  Dtype eta = Dtype(1);
-  // Dtype &eta = this->admm_max_rho_;
+  Dtype eta = 1;
   Dtype t = 1;
   this->extract_patches_cpu_(bottom[0], &bottom_patch);
   caffe_set(alpha.count(), Dtype(0), alpha.mutable_cpu_data());
@@ -189,15 +188,6 @@ void CSCLayer<Dtype>::Forward_cpu(const vector<Blob<Dtype>*>& bottom,
       //     1.-(Dtype)caffe_cpu_zero_norm(this->alpha_->count(), this->alpha_->cpu_data())/alpha_->count()
       //   << std::endl;
       if (stop >= 0) {
-        // loss = loss_new;
-        // this->extract_patches_cpu_(&bottom_recon, &bottom_patch);
-        // caffe_cpu_gemm(CblasTrans, CblasNoTrans, this->blobs_[0]->shape(1),
-        //   bottom_patch.shape(1), this->blobs_[0]->shape(0), Dtype(-1),
-        //   this->blobs_[0]->cpu_data(), bottom_patch.cpu_data(), Dtype(0),
-        //   grad.mutable_cpu_data());
-        // caffe_axpy(grad.count(), lambda2_, alpha.cpu_data(), grad.mutable_cpu_data());
-        // caffe_copy(alpha.count(), alpha.cpu_data(), this->alpha_->mutable_cpu_data());
-        // break;
         Dtype t_new = (1 + std::sqrt(1+4*t*t)) / 2.;
         Dtype coeff = (t-1) / t_new;
         caffe_copy(alpha.count(), alpha.cpu_data(), this->alpha_->mutable_cpu_data());
@@ -237,6 +227,9 @@ void CSCLayer<Dtype>::Forward_cpu(const vector<Blob<Dtype>*>& bottom,
     //   top[0]->mutable_cpu_data() + top_to);
   }
   admm_max_rho_ = eta;
+  LOG(INFO) << "Nonzeros per column: "
+    << (Dtype)caffe_cpu_zero_norm(beta.count(), beta.cpu_data())/beta.shape(1)
+    << std::endl;
 }
 
 /*
@@ -354,7 +347,7 @@ void CSCLayer<Dtype>::Backward_cpu(const vector<Blob<Dtype>*>& top,
       if (std::fabs(beta_data[i]) < 1e-6) {
         beta_diff[i] = Dtype(0);
       }
-      beta_diff[i] /= (lambda2_ + admm_max_rho_);
+      // beta_diff[i] /= (lambda2_ + admm_max_rho_);
     }
   // ------------------------------------------------------------------------
   // ------------------------------------------------------------------------
