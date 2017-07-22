@@ -9,6 +9,7 @@ layer {
   }
   transform_param {
     mean_file: "examples/cifar10/mean.binaryproto"
+    scale: 0.00390625
   }
   data_param {
     shuffle: true
@@ -27,6 +28,7 @@ layer {
   }
   transform_param {
     mean_file: "examples/cifar10/mean.binaryproto"
+    scale: 0.00390625
   }
   data_param {
     source: "examples/cifar10/cifar10_test_lmdb"
@@ -43,22 +45,60 @@ layer {
     kernel_h: 6
     kernel_w: 6
     num_output: 1600
-    lasso_lars_L: 100
-    admm_max_iter: 1
-    admm_eta: 1
-    lambda1: 0.1
-    lambda2: 0.1
+    admm_max_iter: 10
+    admm_eta: 1.5
+    lambda1: 0.01
+    lambda2: 1.
     filler {
         type: "gaussian"
-        std: 1
+        std: 0.1
     }
     boundary: NOPAD
   }
 }
 layer {
+  name: "bn"
+  type: "BatchNorm"
+  bottom: "csc"
+  top: "bn"
+  include {
+    phase: TRAIN
+  }
+  batch_norm_param {
+    use_global_stats: false
+  }
+  param { lr_mult: 0 }
+  param { lr_mult: 0 }
+  param { lr_mult: 0 }
+}
+layer {
+  name: "bn"
+  type: "BatchNorm"
+  bottom: "csc"
+  top: "bn"
+  include {
+    phase: TEST
+  }
+  batch_norm_param {
+    use_global_stats: true
+  }
+  param { lr_mult: 0 }
+  param { lr_mult: 0 }
+  param { lr_mult: 0 }
+}
+layer {
+  name: "scale"
+  type: "Scale"
+  bottom: "bn"
+  top: "bn"
+  scale_param {
+    bias_term: true
+  }
+}
+layer {
   name: "pool"
   type: "Pooling"
-  bottom: "csc"
+  bottom: "bn"
   top: "pool"
   pooling_param {
     pool: AVE
@@ -83,7 +123,7 @@ layer {
     num_output: 10
     weight_filler {
       type: "gaussian"
-      std: 0.01
+      std: 0.1
     }
     bias_filler {
       type: "constant"
