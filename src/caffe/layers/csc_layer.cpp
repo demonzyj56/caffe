@@ -230,7 +230,7 @@ void CSCLayer<Dtype>::Forward_cpu(const vector<Blob<Dtype>*>& bottom,
   }
   admm_max_rho_ = eta;
   LOG(INFO) << "Nonzeros per column: "
-    << (Dtype)caffe_cpu_zero_norm(beta.count(), beta.cpu_data())/beta.shape(1)
+    << (Dtype)caffe_zero_norm(beta.count(), beta.cpu_data())/beta.shape(1)
     << " eta: " << eta
     << std::endl;
 }
