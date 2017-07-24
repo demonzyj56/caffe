@@ -52,6 +52,9 @@ class CSCLayer : public Layer<Dtype> {
   void permute_num_channels_(const Blob<Dtype> *top, Blob<Dtype> *patches,
       bool permute_diff);
 
+  void im2patches_gpu_(const Blob<Dtype> *blob, Blob<Dtype> *patches, bool compute_diff);
+  void patches2im_gpu_(const Blob<Dtype> *patches, Blob<Dtype> *blob, bool compute_diff);
+
   // parameters
   Dtype lambda1_;
   Dtype lambda2_;
