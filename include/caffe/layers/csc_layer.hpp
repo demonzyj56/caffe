@@ -54,6 +54,8 @@ class CSCLayer : public Layer<Dtype> {
 
   void im2patches_gpu_(const Blob<Dtype> *blob, Blob<Dtype> *patches, bool compute_diff);
   void patches2im_gpu_(const Blob<Dtype> *patches, Blob<Dtype> *blob, bool compute_diff);
+  void gemm_Dlalpha_gpu_(const Blob<Dtype> *alpha, Blob<Dtype> *Dlalpha,
+      bool prefer_data);
 
   // parameters
   Dtype lambda1_;

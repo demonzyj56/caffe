@@ -72,6 +72,7 @@ void CSCLayer<Dtype>::Reshape(const vector<Blob<Dtype>*>& bottom,
   top_patch_shape_[1] = bottom_patch_shape_[1];
   this->alpha_->Reshape(top_patch_shape_);
   caffe_set(this->alpha_->count(), Dtype(0), this->alpha_->mutable_cpu_data());
+  admm_max_rho_ = static_cast<Dtype>(this->layer_param_.csc_param().admm_max_rho());
 }
 /*
 // Implement using ADMM.
@@ -144,8 +145,8 @@ void CSCLayer<Dtype>::Forward_cpu(const vector<Blob<Dtype>*>& bottom,
   Blob<Dtype> bottom_recon(bottom_shape);
   Blob<Dtype> alpha_diff(top_patch_shape_);
   Blob<Dtype> beta(top_patch_shape_);
-  Dtype loss = bottom[0]->sumsq_data()/2. + this->alpha_->sumsq_data()*lambda2_/2.;
-  Dtype eta = 1;
+  Dtype loss = bottom[0]->sumsq_data()/2.; // + this->alpha_->sumsq_data()*lambda2_/2.;
+  Dtype eta = admm_max_rho_; //1;
   Dtype t = 1;
   this->extract_patches_cpu_(bottom[0], &bottom_patch);
   caffe_set(alpha.count(), Dtype(0), alpha.mutable_cpu_data());
@@ -154,11 +155,11 @@ void CSCLayer<Dtype>::Forward_cpu(const vector<Blob<Dtype>*>& bottom,
     bottom_patch.shape(1), this->blobs_[0]->shape(0), Dtype(-1),
     this->blobs_[0]->cpu_data(), bottom_patch.cpu_data(), Dtype(0),
     grad.mutable_cpu_data());
-  caffe_axpy(grad.count(), lambda2_, this->alpha_->cpu_data(), grad.mutable_cpu_data());
+  // caffe_axpy(grad.count(), lambda2_, this->alpha_->cpu_data(), grad.mutable_cpu_data());
   for (int tt = 0; tt < admm_max_iter_; ++tt) {
     while (true) {
-      CPUTimer total_timer;
-      total_timer.Start();
+      // CPUTimer total_timer;
+      // total_timer.Start();
       caffe_copy(alpha.count(), this->alpha_->cpu_data(), alpha.mutable_cpu_data());
       caffe_axpy(alpha.count(), Dtype(-1./eta), grad.cpu_data(),
         alpha.mutable_cpu_data());
@@ -166,10 +167,11 @@ void CSCLayer<Dtype>::Forward_cpu(const vector<Blob<Dtype>*>& bottom,
         alpha.mutable_cpu_data());
       // CPUTimer timer;
       // timer.Start();
-      caffe_cpu_gemm(CblasNoTrans, CblasNoTrans, this->blobs_[0]->shape(0),
-        alpha.shape(1), this->blobs_[0]->shape(1), Dtype(1),
-        this->blobs_[0]->cpu_data(), alpha.cpu_data(), Dtype(0),
-        bottom_patch.mutable_cpu_data());
+      this->gemm_Dlalpha_cpu_(&alpha, &bottom_patch, true);
+      // caffe_cpu_gemm(CblasNoTrans, CblasNoTrans, this->blobs_[0]->shape(0),
+      //   alpha.shape(1), this->blobs_[0]->shape(1), Dtype(1),
+      //   this->blobs_[0]->cpu_data(), alpha.cpu_data(), Dtype(0),
+      //   bottom_patch.mutable_cpu_data());
       // timer.Stop();
       this->aggregate_patches_cpu_(&bottom_patch, &bottom_recon);
       caffe_sub(bottom[0]->count(), bottom[0]->cpu_data(), bottom_recon.cpu_data(),
@@ -229,6 +231,7 @@ void CSCLayer<Dtype>::Forward_cpu(const vector<Blob<Dtype>*>& bottom,
   admm_max_rho_ = eta;
   LOG(INFO) << "Nonzeros per column: "
     << (Dtype)caffe_cpu_zero_norm(beta.count(), beta.cpu_data())/beta.shape(1)
+    << " eta: " << eta
     << std::endl;
 }
 
@@ -349,6 +352,7 @@ void CSCLayer<Dtype>::Backward_cpu(const vector<Blob<Dtype>*>& top,
       }
       // beta_diff[i] /= (lambda2_ + admm_max_rho_);
     }
+    // LOG(INFO) << "Backward is scaled by " << lambda2_ + admm_max_rho_ << "\n";
   // ------------------------------------------------------------------------
   // ------------------------------------------------------------------------
     //first term
@@ -378,6 +382,7 @@ void CSCLayer<Dtype>::Backward_cpu(const vector<Blob<Dtype>*>& top,
       bottom[0]->mutable_cpu_diff());
   }
   // std::cout << "Backward elapsed time: " << btimer.Seconds() << std::endl;
+  admm_max_rho_ = Dtype(1);
 }
 
 // TODO(leoyolo): naive impl
