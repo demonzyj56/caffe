@@ -144,9 +144,21 @@ template void aggregate_patches<double>(const Blob<double> *patches, int kernel_
 template <typename Dtype>
 void caffe_cpu_soft_thresholding(const int n, const Dtype thresh, Dtype *x);
 
+template <typename Dtype>
+void caffe_gpu_soft_thresholding(const int n, const Dtype thresh, Dtype *x);
+
 // zero norm
 template <typename Dtype>
-int caffe_cpu_zero_norm(const int n, const Dtype *x);
+int caffe_zero_norm(const int n, const Dtype *x) {
+  int val = 0;
+  for (int i = 0; i < n; ++i) {
+    val += (std::fabs(x[i]) > 1e-6);
+  }
+  return val;
+}
+template int caffe_zero_norm<float>(const int n, const float *x);
+template int caffe_zero_norm<double>(const int n, const double *x);
+
 
 // compute inverse for our need
 template <typename Dtype>

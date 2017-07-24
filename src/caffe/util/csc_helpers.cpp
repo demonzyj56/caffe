@@ -523,18 +523,18 @@ void caffe_cpu_soft_thresholding(const int n, const Dtype thresh, Dtype *x) {
 template void caffe_cpu_soft_thresholding<float>(const int n, const float thresh, float *x);
 template void caffe_cpu_soft_thresholding<double>(const int n, const double thresh, double *x);
 
-template <typename Dtype>
-int caffe_cpu_zero_norm(const int n, const Dtype *x) {
-  int sum = 0;
-  Dtype tol = 1e-6;
-  for (int i = 0; i < n; ++i) {
-    sum += (std::fabs(x[i]) >= tol);
-  }
-  return sum;
-}
-
-template int caffe_cpu_zero_norm<float>(const int n, const float *x);
-template int caffe_cpu_zero_norm<double>(const int n, const double *x);
+// template <typename Dtype>
+// int caffe_cpu_zero_norm(const int n, const Dtype *x) {
+//   int sum = 0;
+//   Dtype tol = 1e-6;
+//   for (int i = 0; i < n; ++i) {
+//     sum += (std::fabs(x[i]) >= tol);
+//   }
+//   return sum;
+// }
+//
+// template int caffe_cpu_zero_norm<float>(const int n, const float *x);
+// template int caffe_cpu_zero_norm<double>(const int n, const double *x);
 
 template <>
 void sparse_inverse<float>(const float lambda2, const Blob<float> *Dl,
