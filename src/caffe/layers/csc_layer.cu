@@ -2,6 +2,7 @@
 
 #include "caffe/layers/csc_layer.hpp"
 
+namespace caffe {
 
 template <typename Dtype>
 __global__ void im2patches_circulant_kernel(const int n, const Dtype *blob,
@@ -516,3 +517,5 @@ void CSCLayer<Dtype>::gemm_Dlalpha_gpu_(const Blob<Dtype> *alpha, Blob<Dtype> *D
 }
 
 INSTANTIATE_LAYER_GPU_FUNCS(CSCLayer);
+
+} // namespace caffe
