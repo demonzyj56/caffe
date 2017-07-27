@@ -91,6 +91,7 @@ void CSCLayer<Dtype>::Forward_cpu(const vector<Blob<Dtype>*>& bottom,
 //  this->extract_patches_cpu_(bottom[0], &bottom_patch);
   this->im2patches_cpu_(bottom[0], &bottom_patch, false);
   caffe_set(alpha.count(), Dtype(0), alpha.mutable_cpu_data());
+  caffe_set(this->alpha_->count(), Dtype(0), this->alpha_->mutable_cpu_data());
   caffe_set(beta.count(), Dtype(0), beta.mutable_cpu_data());
   caffe_cpu_gemm(CblasTrans, CblasNoTrans, this->blobs_[0]->shape(1),
     bottom_patch.shape(1), this->blobs_[0]->shape(0), Dtype(-1),
@@ -121,7 +122,7 @@ void CSCLayer<Dtype>::Forward_cpu(const vector<Blob<Dtype>*>& bottom,
       //   << " sparsity: " <<
       //     1.-(Dtype)caffe_cpu_zero_norm(this->alpha_->count(), this->alpha_->cpu_data())/alpha_->count()
       //   << std::endl;
-	  LOG(INFO) << "Stop: " << stop;
+	  // LOG(INFO) << "Stop: " << stop;
       if (stop >= 0) {
         Dtype t_new = (1 + std::sqrt(1+4*t*t)) / 2.;
         Dtype coeff = (t-1) / t_new;

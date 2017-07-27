@@ -190,7 +190,8 @@ void CSCLayer<Dtype>::Forward_gpu(const vector<Blob<Dtype>*>& bottom,
   Dtype eta = admm_max_rho_;
   Dtype t = 1;
   this->im2patches_gpu_(bottom[0], &bottom_patch, false);
-//  caffe_gpu_set(alpha.count(), Dtype(0), alpha.mutable_gpu_data());
+  caffe_gpu_set(alpha.count(), Dtype(0), alpha.mutable_gpu_data());
+  caffe_gpu_set(this->alpha_->count(), Dtype(0), this->alpha_->mutable_gpu_data());
   caffe_gpu_set(beta.count(), Dtype(0), beta.mutable_gpu_data());
   caffe_gpu_gemm(CblasTrans, CblasNoTrans, this->blobs_[0]->shape(1),
     bottom_patch.shape(1), this->blobs_[0]->shape(0), Dtype(-1),
@@ -213,7 +214,7 @@ void CSCLayer<Dtype>::Forward_gpu(const vector<Blob<Dtype>*>& bottom,
       Dtype dot_val = 0.;
       caffe_gpu_dot(alpha_diff.count(), grad.gpu_data(), alpha_diff.gpu_data(), &dot_val);
       Dtype stop = loss + dot_val  + alpha_diff.sumsq_data()*eta/2. - loss_new;
-	  LOG(INFO) << "Stop: " << stop;
+	  /* LOG(INFO) << "Stop: " << stop; */
       if (stop >= 0) {
         Dtype t_new = (1 + std::sqrt(1+4*t*t)) / 2.;
         Dtype coeff = (t-1) / t_new;
@@ -249,9 +250,9 @@ void CSCLayer<Dtype>::Forward_gpu(const vector<Blob<Dtype>*>& bottom,
       top[0]->mutable_gpu_data() + top_to);
   }
   admm_max_rho_ = eta;
-  LOG(INFO) << "Nonzeros per column: "
-    << (Dtype)this->caffe_zero_norm_(beta.count(), beta.cpu_data())/beta.shape(1)
-    << " eta: " << eta;
+  /* LOG(INFO) << "Nonzeros per column: " */
+  /*   << (Dtype)this->caffe_zero_norm_(beta.count(), beta.cpu_data())/beta.shape(1) */
+  /*   << " eta: " << eta; */
 }
 
 template <typename Dtype>
