@@ -1,0 +1,148 @@
+name: "CIFAR10_csc"
+layer {
+  name: "cifar"
+  type: "Data"
+  top: "data"
+  top: "label"
+  include {
+    phase: TRAIN
+  }
+  transform_param {
+    mean_file: "examples/cifar10/mean.binaryproto"
+    scale: 0.00390625
+  }
+  data_param {
+    shuffle: true
+    source: "examples/cifar10/cifar10_train_lmdb"
+    batch_size: 100
+    backend: LMDB
+  }
+}
+layer {
+  name: "cifar"
+  type: "Data"
+  top: "data"
+  top: "label"
+  include {
+    phase: TEST
+  }
+  transform_param {
+    mean_file: "examples/cifar10/mean.binaryproto"
+    scale: 0.00390625
+  }
+  data_param {
+    source: "examples/cifar10/cifar10_test_lmdb"
+    batch_size: 100
+    backend: LMDB
+  }
+}
+layer {
+  name: "csc"
+  type: "CSC"
+  bottom: "data"
+  top: "csc"
+  csc_param {
+    kernel_h: 6
+    kernel_w: 6
+    num_output: 200
+    admm_max_iter: 10
+    admm_eta: 1.5
+    lambda1: 0.01
+    lambda2: 1.
+    filler {
+        type: "xavier"
+    }
+    boundary: NOPAD
+  }
+}
+layer {
+  name: "bn"
+  type: "BatchNorm"
+  bottom: "csc"
+  top: "bn"
+  include {
+    phase: TRAIN
+  }
+  batch_norm_param {
+    use_global_stats: false
+  }
+  param { lr_mult: 0 }
+  param { lr_mult: 0 }
+  param { lr_mult: 0 }
+}
+layer {
+  name: "bn"
+  type: "BatchNorm"
+  bottom: "csc"
+  top: "bn"
+  include {
+    phase: TEST
+  }
+  batch_norm_param {
+    use_global_stats: true
+  }
+  param { lr_mult: 0 }
+  param { lr_mult: 0 }
+  param { lr_mult: 0 }
+}
+layer {
+  name: "scale"
+  type: "Scale"
+  bottom: "bn"
+  top: "bn"
+  scale_param {
+    bias_term: true
+  }
+}
+layer {
+  name: "pool"
+  type: "Pooling"
+  bottom: "bn"
+  top: "pool"
+  pooling_param {
+    pool: AVE
+    kernel_size: 14
+    stride: 13
+  }
+}
+layer {
+  name: "ip"
+  type: "InnerProduct"
+  bottom: "pool"
+  top: "ip"
+  param {
+    lr_mult: 1
+    decay_mult: 1
+  }
+  param {
+    lr_mult: 2
+    decay_mult: 0
+  }
+  inner_product_param {
+    num_output: 10
+    weight_filler {
+      type: "gaussian"
+      std: 0.1
+    }
+    bias_filler {
+      type: "constant"
+    }
+  }
+}
+layer {
+  name: "accuracy"
+  type: "Accuracy"
+  bottom: "ip"
+  bottom: "label"
+  top: "accuracy"
+  include {
+    phase: TEST
+  }
+}
+layer {
+  name: "loss"
+  type: "SoftmaxWithLoss"
+  bottom: "ip"
+  bottom: "label"
+  top: "loss"
+}
