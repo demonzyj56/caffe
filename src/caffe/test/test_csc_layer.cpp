@@ -29,11 +29,11 @@ class CSCLayerTest : public MultiDeviceTest<TypeParam> {
 	admm_max_iter_ = 1;
   }
   virtual ~CSCLayerTest() {
-    for (auto it = blob_bottom_vec_.begin(); it != blob_bottom_vec_.end(); ++it) {
-      delete *it;
+    for (size_t i = 0; i < blob_bottom_vec_.size(); ++i) {
+      delete blob_bottom_vec_[i];
     }
-    for (auto it = blob_top_vec_.begin(); it != blob_top_vec_.end(); ++it) {
-      delete *it;
+    for (size_t i = 0; i < blob_top_vec_.size(); ++i) {
+      delete blob_top_vec_[i];
     }
   }
 
