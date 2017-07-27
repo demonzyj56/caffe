@@ -308,7 +308,7 @@ message ParamSpec {
 // NOTE
 // Update the next available ID when you add a new LayerParameter field.
 //
-// LayerParameter next available layer-specific ID: 147 (last added: recurrent_param)
+// LayerParameter next available layer-specific ID: 148 (last added: csc_param)
 message LayerParameter {
   optional string name = 1; // the layer name
   optional string type = 2; // the layer type
@@ -405,6 +405,7 @@ message LayerParameter {
   optional ThresholdParameter threshold_param = 128;
   optional TileParameter tile_param = 138;
   optional WindowDataParameter window_data_param = 129;
+  optional CSCParameter csc_param = 147;
 }
 
 // Message that stores parameters used to apply transformation
@@ -1409,4 +1410,36 @@ message PReLUParameter {
   optional FillerParameter filler = 1;
   // Whether or not slope parameters are shared across channels.
   optional bool channel_shared = 2 [default = false];
+}
+
+message CSCParameter {
+  // Convolutional Sparse Coding Layer
+
+  // lambda1 and lambda2 for elastic net
+  optional float lambda1 = 1;
+  optional float lambda2 = 2;
+  
+  // boundary type for dictionary
+  enum Boundary {
+    NOPAD = 0;
+    PAD_FRONT = 1;
+    PAD_BACK = 2;
+    PAD_BOTH = 3;
+    CIRCULANT_FRONT = 4;
+    CIRCULANT_BACK = 5;
+  }
+
+  // dictionary description
+  optional Boundary boundary = 3 [default = NOPAD];
+  optional uint32 kernel_h = 4;
+  optional uint32 kernel_w = 5;
+  optional uint32 num_output = 6;
+  optional uint32 lasso_lars_L = 11 [default = 100];
+  optional uint32 admm_max_iter = 7 [default = 100];
+  optional float admm_max_rho = 8 [default = 100.];
+  optional float admm_eta = 9 [default = 1.1];
+
+  // filler type for the dictionary
+  optional FillerParameter filler = 10;
+
 }
