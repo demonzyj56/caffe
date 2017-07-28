@@ -15,6 +15,7 @@ layer {
     source: "examples/cifar10/cifar10_train_lmdb"
     batch_size: 100
     backend: LMDB
+    prefetch: 16
   }
 }
 layer {
