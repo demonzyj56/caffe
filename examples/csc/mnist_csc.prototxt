@@ -1,6 +1,6 @@
-name: "CIFAR10_csc"
+name: "mnist_csc"
 layer {
-  name: "cifar"
+  name: "mnist"
   type: "Data"
   top: "data"
   top: "label"
@@ -8,18 +8,17 @@ layer {
     phase: TRAIN
   }
   transform_param {
-    mean_file: "examples/cifar10/mean.binaryproto"
     scale: 0.00390625
   }
   data_param {
-    source: "examples/cifar10/cifar10_train_lmdb"
-    batch_size: 100
+    source: "examples/mnist/mnist_train_lmdb"
+    batch_size: 25
     backend: LMDB
     prefetch: 16
   }
 }
 layer {
-  name: "cifar"
+  name: "mnist"
   type: "Data"
   top: "data"
   top: "label"
@@ -27,11 +26,10 @@ layer {
     phase: TEST
   }
   transform_param {
-    mean_file: "examples/cifar10/mean.binaryproto"
     scale: 0.00390625
   }
   data_param {
-    source: "examples/cifar10/cifar10_test_lmdb"
+    source: "examples/mnist/mnist_test_lmdb"
     batch_size: 100
     backend: LMDB
   }
@@ -44,7 +42,7 @@ layer {
   csc_param {
     kernel_h: 6
     kernel_w: 6
-    num_output: 200
+    num_output: 100
     admm_max_iter: 10
     admm_eta: 1.5
     lambda1: 0.01
@@ -100,9 +98,9 @@ layer {
   bottom: "bn"
   top: "pool"
   pooling_param {
-    pool: AVE
-    kernel_size: 14
-    stride: 13
+    pool: MAX
+    kernel_size: 12
+    stride: 11
   }
 }
 layer {
@@ -121,8 +119,7 @@ layer {
   inner_product_param {
     num_output: 10
     weight_filler {
-      type: "gaussian"
-      std: 0.1
+      type: "xavier"
     }
     bias_filler {
       type: "constant"
@@ -135,9 +132,6 @@ layer {
   bottom: "ip"
   bottom: "label"
   top: "accuracy"
-  include {
-    phase: TEST
-  }
 }
 layer {
   name: "loss"
