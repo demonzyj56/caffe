@@ -45,7 +45,15 @@ void CSCLayer<Dtype>::LayerSetUp(const vector<Blob<Dtype>*>& bottom,
   top_patch_shape_.resize(2);
   top_patch_shape_[0] = num_output_;
   top_patch_shape_[1] = bottom_patch_shape_[1];
-  this->alpha_ = shared_ptr<Blob<Dtype> > (new Blob<Dtype>(top_patch_shape_));
+  // this->alpha_ = shared_ptr<Blob<Dtype> > (new Blob<Dtype>(top_patch_shape_));
+  // initialize buffer
+  this->alpha_ = shared_ptr<Blob<Dtype> > (new Blob<Dtype>());
+  this->alpha_buffer_ = shared_ptr<Blob<Dtype> > (new Blob<Dtype>());
+  this->beta_buffer_ = shared_ptr<Blob<Dtype> > (new Blob<Dtype>());
+  this->grad_buffer_ = shared_ptr<Blob<Dtype> > (new Blob<Dtype>());
+  this->alpha_diff_buffer_ = shared_ptr<Blob<Dtype> > (new Blob<Dtype>());
+  this->bottom_patch_buffer_ = shared_ptr<Blob<Dtype> > (new Blob<Dtype>());
+  this->bottom_recon_buffer_ = shared_ptr<Blob<Dtype> > (new Blob<Dtype>());
 }
 
 template <typename Dtype>
@@ -69,22 +77,36 @@ void CSCLayer<Dtype>::Reshape(const vector<Blob<Dtype>*>& bottom,
   top_patch_shape_.resize(2);
   top_patch_shape_[0] = num_output_;
   top_patch_shape_[1] = bottom_patch_shape_[1];
-  this->alpha_->Reshape(top_patch_shape_);
+  // this->alpha_->Reshape(top_patch_shape_);
   //caffe_set(this->alpha_->count(), Dtype(0), this->alpha_->mutable_cpu_data());
   admm_max_rho_ = static_cast<Dtype>(this->layer_param_.csc_param().admm_max_rho());
+  // reshape buffer
+  this->alpha_->Reshape(top_patch_shape_);
+  this->alpha_buffer_->Reshape(top_patch_shape_);
+  this->beta_buffer_->Reshape(top_patch_shape_);
+  this->grad_buffer_->Reshape(top_patch_shape_);
+  this->alpha_diff_buffer_->Reshape(top_patch_shape_);
+  this->bottom_patch_buffer_->Reshape(bottom_patch_shape_);
+  this->bottom_recon_buffer_->Reshape(bottom[0]->shape());
 }
 
 template <typename Dtype>
 void CSCLayer<Dtype>::Forward_cpu(const vector<Blob<Dtype>*>& bottom,
       const vector<Blob<Dtype>*>& top) {
  
-  const vector<int> &bottom_shape = bottom[0]->shape();
-  Blob<Dtype> bottom_patch(bottom_patch_shape_);
-  Blob<Dtype> alpha(top_patch_shape_);
-  Blob<Dtype> grad(top_patch_shape_);
-  Blob<Dtype> bottom_recon(bottom_shape);
-  Blob<Dtype> alpha_diff(top_patch_shape_);
-  Blob<Dtype> beta(top_patch_shape_);
+  // const vector<int> &bottom_shape = bottom[0]->shape();
+  // Blob<Dtype> bottom_patch(bottom_patch_shape_);
+  // Blob<Dtype> alpha(top_patch_shape_);
+  // Blob<Dtype> grad(top_patch_shape_);
+  // Blob<Dtype> bottom_recon(bottom_shape);
+  // Blob<Dtype> alpha_diff(top_patch_shape_);
+  // Blob<Dtype> beta(top_patch_shape_);
+  Blob<Dtype> &bottom_patch = *this->bottom_patch_buffer_;
+  Blob<Dtype> &alpha = *this->alpha_buffer_;
+  Blob<Dtype> &grad = *this->grad_buffer_;
+  Blob<Dtype> &bottom_recon = *this->bottom_recon_buffer_;
+  Blob<Dtype> &alpha_diff = *this->alpha_diff_buffer_;
+  Blob<Dtype> &beta = *this->beta_buffer_;
   Dtype loss = bottom[0]->sumsq_data()/2.;
   Dtype eta = admm_max_rho_;
   Dtype t = 1;
@@ -162,9 +184,9 @@ void CSCLayer<Dtype>::Forward_cpu(const vector<Blob<Dtype>*>& bottom,
     //   top[0]->mutable_cpu_data() + top_to);
   }
   admm_max_rho_ = eta;
-  LOG(INFO) << "Nonzeros per column: "
-	  << (Dtype)this->caffe_zero_norm_(beta.count(), beta.cpu_data()) / beta.shape(1)
-	  << " eta: " << eta;
+  // LOG(INFO) << "Nonzeros per column: "
+  //     << (Dtype)this->caffe_zero_norm_(beta.count(), beta.cpu_data()) / beta.shape(1)
+  //     << " eta: " << eta;
 }
 
 /*
@@ -179,10 +201,13 @@ void CSCLayer<Dtype>::Backward_cpu(const vector<Blob<Dtype>*>& top,
       const vector<Blob<Dtype>*>& bottom) {
   CPUTimer btimer;
   btimer.Start();
-  Blob<Dtype> residual(bottom_patch_shape_);
-  Blob<Dtype> Dlbeta(bottom_patch_shape_);
-  Blob<Dtype> beta(top_patch_shape_);
-  Blob<Dtype> bottom_recon(bottom[0]->shape());
+  // Blob<Dtype> residual(bottom_patch_shape_);
+  // Blob<Dtype> Dlbeta(bottom_patch_shape_);
+  // Blob<Dtype> beta(top_patch_shape_);
+  // Blob<Dtype> bottom_recon(bottom[0]->shape());
+  Blob<Dtype> &residual = *bottom_patch_buffer_;
+  Blob<Dtype> &beta = *beta_buffer_;
+  Blob<Dtype> &bottom_recon = *bottom_recon_buffer_;
   // ------------------------------------------------------------------------
   // use beta as buffer for top diff in patch view
   this->permute_num_channels_cpu_(top[0], &beta, true);
@@ -203,9 +228,11 @@ void CSCLayer<Dtype>::Backward_cpu(const vector<Blob<Dtype>*>& top,
   // ------------------------------------------------------------------------
   // ------------------------------------------------------------------------
     //first term
-    this->gemm_Dlalpha_cpu_(&beta, &Dlbeta, true);
+    // this->gemm_Dlalpha_cpu_(&beta, &Dlbeta, true);
+    this->gemm_Dlalpha_cpu_(&beta, &residual, true);
 //    this->aggregate_patches_cpu_(&Dlbeta, &bottom_recon);
-	this->patches2im_cpu_(&Dlbeta, &bottom_recon, false);
+	// this->patches2im_cpu_(&Dlbeta, &bottom_recon, false);
+	this->patches2im_cpu_(&residual, &bottom_recon, false);
     caffe_sub(bottom[0]->count(), bottom[0]->cpu_data(), bottom_recon.cpu_data(),
       bottom_recon.mutable_cpu_data());
 //    this->extract_patches_cpu_(&bottom_recon, &residual);
@@ -216,9 +243,11 @@ void CSCLayer<Dtype>::Backward_cpu(const vector<Blob<Dtype>*>& top,
   // ------------------------------------------------------------------------
   // ------------------------------------------------------------------------
     //second term
-    this->gemm_Dlalpha_cpu_(&beta, &Dlbeta, false);
+    // this->gemm_Dlalpha_cpu_(&beta, &Dlbeta, false);
+    this->gemm_Dlalpha_cpu_(&beta, &residual, false);
 //    this->aggregate_patches_cpu_(&Dlbeta, &bottom_recon);
-	this->patches2im_cpu_(&Dlbeta, &bottom_recon, false);
+	// this->patches2im_cpu_(&Dlbeta, &bottom_recon, false);
+	this->patches2im_cpu_(&residual, &bottom_recon, false);
 //    this->extract_patches_cpu_(&bottom_recon, &residual);
 	this->im2patches_cpu_(&bottom_recon, &residual, false);
     caffe_cpu_gemm(CblasNoTrans, CblasTrans, residual.shape(0), beta.shape(0),

@@ -89,6 +89,15 @@ class CSCLayer : public Layer<Dtype> {
   vector<int> top_patch_shape_;
   shared_ptr<Blob<Dtype> > alpha_;
 
+  // buffer for forward and backward
+  shared_ptr<Blob<Dtype> > alpha_buffer_;
+  shared_ptr<Blob<Dtype> > beta_buffer_;
+  shared_ptr<Blob<Dtype> > grad_buffer_;
+  shared_ptr<Blob<Dtype> > alpha_diff_buffer_;
+  shared_ptr<Blob<Dtype> > bottom_patch_buffer_;
+  shared_ptr<Blob<Dtype> > bottom_recon_buffer_;
+
+
 };
 
 
