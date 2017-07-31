@@ -53,6 +53,10 @@
 # OSX dir files
 .DS_Store
 
+# YCM cofing files or compile_commands
+.ycm_extra_conf.py
+compile_commands.json
+
 ## Caffe
 
 # User's build configuration
@@ -97,3 +101,6 @@ LOCK
 LOG*
 CURRENT
 MANIFEST-*
+
+# log files
+*.log
