@@ -44,7 +44,7 @@ layer {
   csc_param {
     kernel_h: 6
     kernel_w: 6
-    num_output: 400
+    num_output: 1600
     admm_max_iter: 10
     admm_eta: 1.5
     lambda1: 0.1
