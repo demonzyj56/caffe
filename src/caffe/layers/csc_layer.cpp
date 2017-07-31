@@ -26,15 +26,21 @@ void CSCLayer<Dtype>::LayerSetUp(const vector<Blob<Dtype>*>& bottom,
     LOG(INFO) << "Skipping parameter initialization";
   } else {
     // dictionary is stored here
-    this->blobs_.resize(1);
+    this->blobs_.resize(2);
     vector<int> dict_shape(2);
     dict_shape[0] = channels_ * kernel_h_ * kernel_w_;
     dict_shape[1] = num_output_;
     this->blobs_[0].reset(new Blob<Dtype>(dict_shape));
+    this->blobs_[1].reset(new Blob<Dtype>(vector<int>(0)));
     // fill the dictionary with initial value
     shared_ptr<Filler<Dtype> > weight_filler(GetFiller<Dtype>(
         csc_param.filler()));
     weight_filler->Fill(this->blobs_[0].get());
+    FillerParameter filler_param;
+    filler_param.set_type("constant");
+    filler_param.set_value(static_cast<Dtype>(csc_param.lambda1()));
+    weight_filler.reset(GetFiller<Dtype>(filler_param));
+    weight_filler->Fill(this->blobs_[1].get());
   }
   this->param_propagate_down_.resize(this->blobs_.size(), true);
   bottom_patch_shape_.resize(2);
@@ -54,6 +60,7 @@ void CSCLayer<Dtype>::LayerSetUp(const vector<Blob<Dtype>*>& bottom,
   this->alpha_diff_buffer_ = shared_ptr<Blob<Dtype> > (new Blob<Dtype>());
   this->bottom_patch_buffer_ = shared_ptr<Blob<Dtype> > (new Blob<Dtype>());
   this->bottom_recon_buffer_ = shared_ptr<Blob<Dtype> > (new Blob<Dtype>());
+  CHECK_EQ(this->blobs_[1]->count(), 1);
 }
 
 template <typename Dtype>
@@ -110,6 +117,7 @@ void CSCLayer<Dtype>::Forward_cpu(const vector<Blob<Dtype>*>& bottom,
   Dtype loss = bottom[0]->sumsq_data()/2.;
   Dtype eta = admm_max_rho_;
   Dtype t = 1;
+  Dtype lambda1 = this->blobs_[1]->mutable_cpu_data()[0];
 //  this->extract_patches_cpu_(bottom[0], &bottom_patch);
   this->im2patches_cpu_(bottom[0], &bottom_patch, false);
   caffe_set(alpha.count(), Dtype(0), alpha.mutable_cpu_data());
@@ -124,7 +132,7 @@ void CSCLayer<Dtype>::Forward_cpu(const vector<Blob<Dtype>*>& bottom,
       caffe_copy(alpha.count(), this->alpha_->cpu_data(), alpha.mutable_cpu_data());
       caffe_axpy(alpha.count(), Dtype(-1./eta), grad.cpu_data(),
         alpha.mutable_cpu_data());
-      this->caffe_cpu_soft_thresholding_(alpha.count(), Dtype(lambda1_/eta),
+      this->caffe_cpu_soft_thresholding_(alpha.count(), Dtype(lambda1/eta),
         alpha.mutable_cpu_data());
       this->gemm_Dlalpha_cpu_(&alpha, &bottom_patch, true);
 //      this->aggregate_patches_cpu_(&bottom_patch, &bottom_recon);
@@ -256,6 +264,9 @@ void CSCLayer<Dtype>::Backward_cpu(const vector<Blob<Dtype>*>& top,
     caffe_scal(this->blobs_[0]->count(), Dtype(1./bottom[0]->shape(0)),
       this->blobs_[0]->mutable_cpu_diff());
   // ------------------------------------------------------------------------
+  }
+  if (this->param_propagate_down_[0]) {
+    LOG(FATAL) << "Backward of lambda1 is not implemented";
   }
   if (propagate_down[0]) {
     caffe_copy(bottom[0]->count(), bottom_recon.cpu_data(),
