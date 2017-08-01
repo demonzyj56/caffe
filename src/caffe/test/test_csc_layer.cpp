@@ -13,7 +13,7 @@ class CSCLayerTest : public MultiDeviceTest<TypeParam> {
   typedef typename TypeParam::Dtype Dtype;
  protected:
   CSCLayerTest()
-      : blob_bottom_(new Blob<Dtype>(100, 3, 32, 32)), blob_top_(new Blob<Dtype>()) {
+      : blob_bottom_(new Blob<Dtype>(10, 3, 32, 32)), blob_top_(new Blob<Dtype>()) {
     FillerParameter filler_param;
     GaussianFiller<Dtype> filler(filler_param);
     // UniformFiller<Dtype> filler(filler_param);
@@ -63,7 +63,7 @@ TYPED_TEST(CSCLayerTest, TestSetUp) {
     new CSCLayer<Dtype>(layer_param));
   layer->SetUp(this->blob_bottom_vec_, this->blob_top_vec_);
   vector<shared_ptr<Blob<Dtype> > > &blobs = layer->blobs();
-  EXPECT_EQ(this->blob_top_->num(), 100);
+  EXPECT_EQ(this->blob_top_->num(), 10);
   EXPECT_EQ(this->blob_top_->channels(), 1600);
   EXPECT_EQ(this->blob_top_->height(), 27);
   EXPECT_EQ(this->blob_top_->width(), 27);
