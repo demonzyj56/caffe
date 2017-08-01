@@ -62,6 +62,11 @@ class CSCLayer : public Layer<Dtype> {
   void gemm_Dlalpha_gpu_(const Blob<Dtype> *alpha, Blob<Dtype> *Dlalpha,
       bool prefer_data);
 
+  Dtype get_lambda1_gpu_data_() const;
+  Dtype get_lambda1_gpu_diff_() const;
+  void set_lambda1_gpu_data_(Dtype l);
+  void set_lambda1_gpu_diff_(Dtype l);
+
   inline int caffe_zero_norm_(const int n, const Dtype *x) {
 	  int val = 0;
 	  for (int i = 0; i < n; ++i) {

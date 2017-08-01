@@ -67,10 +67,11 @@ TYPED_TEST(CSCLayerTest, TestSetUp) {
   EXPECT_EQ(this->blob_top_->channels(), 1600);
   EXPECT_EQ(this->blob_top_->height(), 27);
   EXPECT_EQ(this->blob_top_->width(), 27);
-  EXPECT_EQ(blobs.size(), 1);
+  EXPECT_EQ(blobs.size(), 2);
   EXPECT_EQ(blobs[0]->shape().size(), 2);
   EXPECT_EQ(blobs[0]->shape(0), 108);
   EXPECT_EQ(blobs[0]->shape(1), 1600);
+  EXPECT_EQ(blobs[1]->count(), 1);
 }
 
 TYPED_TEST(CSCLayerTest, TestForwardSanity) {

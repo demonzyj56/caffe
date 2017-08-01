@@ -203,12 +203,18 @@ void CSCLayer<Dtype>::Forward_gpu(const vector<Blob<Dtype>*>& bottom,
     bottom_patch.shape(1), this->blobs_[0]->shape(0), Dtype(-1),
     this->blobs_[0]->gpu_data(), bottom_patch.gpu_data(), Dtype(0),
     grad.mutable_gpu_data());
+  Dtype lambda1 = this->get_lambda1_gpu_data_();
+  if (lambda1 < 1e-5) {
+    LOG(INFO) << "lambda1 value: " << lambda1 
+      << " below threshold of 1e-5, thresholding to 1e-5";
+    this->set_lambda1_gpu_data_(lambda1);
+  }
   for (int tt = 0; tt < admm_max_iter_; ++tt) {
     while (true) {
       caffe_copy(alpha.count(), this->alpha_->gpu_data(), alpha.mutable_gpu_data());
       caffe_gpu_axpy(alpha.count(), Dtype(-1./eta), grad.gpu_data(),
         alpha.mutable_gpu_data());
-      this->caffe_gpu_soft_thresholding_(alpha.count(), Dtype(lambda1_/eta),
+      this->caffe_gpu_soft_thresholding_(alpha.count(), Dtype(lambda1/eta),
         alpha.mutable_gpu_data());
       this->gemm_Dlalpha_gpu_(&alpha, &bottom_patch, true);
       this->patches2im_gpu_(&bottom_patch, &bottom_recon, false);
@@ -288,9 +294,9 @@ void CSCLayer<Dtype>::Backward_gpu(const vector<Blob<Dtype>*>& top,
   // ------------------------------------------------------------------------
   if (this->param_propagate_down_[0]) {
   // ------------------------------------------------------------------------
-    // solve beta
     Dtype *beta_data = beta.mutable_gpu_data();
     Dtype *beta_diff = beta.mutable_gpu_diff();
+    // solve beta
     set_if_kernel<Dtype><<<CAFFE_GET_BLOCKS(beta.count()), CAFFE_CUDA_NUM_THREADS>>>(
       beta.count(), beta_data, beta_diff);
 	CUDA_POST_KERNEL_CHECK;
@@ -321,6 +327,18 @@ void CSCLayer<Dtype>::Backward_gpu(const vector<Blob<Dtype>*>& top,
     caffe_gpu_scal(this->blobs_[0]->count(), Dtype(1./bottom[0]->shape(0)),
       this->blobs_[0]->mutable_gpu_diff());
   // ------------------------------------------------------------------------
+  }
+  if (this->param_propagate_down_[1]) {
+    // TODO(leoyolo): change to a reduction kernel
+    Blob<Dtype> *buf = this->alpha_.get();
+    caffe_gpu_set(buf->count(), Dtype(1), buf->mutable_gpu_data());
+    Dtype lambda1_diff = 0;
+    caffe_gpu_dot(beta.count(), buf->gpu_data(), beta.gpu_data(),
+      &lambda1_diff);
+    lambda1_diff /= bottom[0]->shape(0) * admm_max_rho_;
+    this->set_lambda1_gpu_diff_(-lambda1_diff);
+    /* LOG(INFO) << "admm_max_rho_: " << admm_max_rho_ << "\n"; */
+    /* LOG(INFO) << "lambda1_diff" << lambda1_diff << "\n"; */
   }
   if (propagate_down[0]) {
     caffe_copy(bottom[0]->count(), bottom_recon.gpu_data(),
@@ -375,6 +393,38 @@ void CSCLayer<Dtype>::permute_num_channels_gpu_(const Blob<Dtype> *top, Blob<Dty
 				patches->mutable_gpu_diff() + target_offset);
 		}
 	}
+}
+
+template <typename Dtype>
+Dtype CSCLayer<Dtype>::get_lambda1_gpu_data_() const {
+  CHECK(this->blobs_[1].get());
+  Dtype lambda1 = 0;
+  CUDA_CHECK(cudaMemcpy((void*)&lambda1, (void*)this->blobs_[1]->gpu_data(),
+    sizeof(Dtype), cudaMemcpyDeviceToHost));
+  return lambda1;
+}
+
+template <typename Dtype>
+void CSCLayer<Dtype>::set_lambda1_gpu_data_(Dtype l) {
+  CHECK(this->blobs_[1].get());
+  CUDA_CHECK(cudaMemcpy((void*)this->blobs_[1]->mutable_gpu_data(), (void*)&l,
+    sizeof(Dtype), cudaMemcpyHostToDevice));
+}
+
+template <typename Dtype>
+Dtype CSCLayer<Dtype>::get_lambda1_gpu_diff_() const {
+  CHECK(this->blobs_[1].get());
+  Dtype lambda1 = 0;
+  CUDA_CHECK(cudaMemcpy((void*)&lambda1, (void*)this->blobs_[1]->gpu_diff(),
+    sizeof(Dtype), cudaMemcpyDeviceToHost));
+  return lambda1;
+}
+
+template <typename Dtype>
+void CSCLayer<Dtype>::set_lambda1_gpu_diff_(Dtype l) {
+  CHECK(this->blobs_[1].get());
+  CUDA_CHECK(cudaMemcpy((void*)this->blobs_[1]->mutable_gpu_diff(), (void*)&l,
+    sizeof(Dtype), cudaMemcpyHostToDevice));
 }
 
 INSTANTIATE_LAYER_GPU_FUNCS(CSCLayer);
