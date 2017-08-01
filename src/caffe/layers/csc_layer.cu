@@ -204,8 +204,11 @@ void CSCLayer<Dtype>::Forward_gpu(const vector<Blob<Dtype>*>& bottom,
     this->blobs_[0]->gpu_data(), bottom_patch.gpu_data(), Dtype(0),
     grad.mutable_gpu_data());
   Dtype lambda1 = this->get_lambda1_gpu_data_();
-  lambda1 = lambda1 > 1e-5 ? lambda1 : 1e-5;
-  this->set_lambda1_gpu_data_(lambda1);
+  if (lambda1 < 1e-5) {
+    LOG(INFO) << "lambda1 value: " << lambda1 
+      << " below threshold of 1e-5, thresholding to 1e-5";
+    this->set_lambda1_gpu_data_(lambda1);
+  }
   for (int tt = 0; tt < admm_max_iter_; ++tt) {
     while (true) {
       caffe_copy(alpha.count(), this->alpha_->gpu_data(), alpha.mutable_gpu_data());
@@ -332,9 +335,9 @@ void CSCLayer<Dtype>::Backward_gpu(const vector<Blob<Dtype>*>& top,
     caffe_gpu_dot(beta.count(), buf->gpu_data(), beta.gpu_data(),
       &lambda1_diff);
     lambda1_diff /= bottom[0]->shape(0) * admm_max_rho_;
-    this->set_lambda1_gpu_diff_(lambda1_diff);
-    LOG(INFO) << "admm_max_rho_: " << admm_max_rho_ << "\n";
-    LOG(INFO) << "lambda1_diff" << lambda1_diff << "\n";
+    this->set_lambda1_gpu_diff_(-lambda1_diff);
+    /* LOG(INFO) << "admm_max_rho_: " << admm_max_rho_ << "\n"; */
+    /* LOG(INFO) << "lambda1_diff" << lambda1_diff << "\n"; */
   }
   if (propagate_down[0]) {
     caffe_copy(bottom[0]->count(), bottom_recon.gpu_data(),
