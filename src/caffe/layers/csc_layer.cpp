@@ -36,11 +36,12 @@ void CSCLayer<Dtype>::LayerSetUp(const vector<Blob<Dtype>*>& bottom,
     shared_ptr<Filler<Dtype> > weight_filler(GetFiller<Dtype>(
         csc_param.filler()));
     weight_filler->Fill(this->blobs_[0].get());
-    FillerParameter filler_param;
-    filler_param.set_type("constant");
-    filler_param.set_value(static_cast<Dtype>(csc_param.lambda1()));
-    weight_filler.reset(GetFiller<Dtype>(filler_param));
-    weight_filler->Fill(this->blobs_[1].get());
+    this->blobs_[1]->mutable_cpu_data()[0] = static_cast<Dtype>(csc_param.lambda1());
+    // FillerParameter filler_param;
+    // filler_param.set_type("constant");
+    // filler_param.set_value(static_cast<Dtype>(csc_param.lambda1()));
+    // weight_filler.reset(GetFiller<Dtype>(filler_param));
+    // weight_filler->Fill(this->blobs_[1].get());
   }
   this->param_propagate_down_.resize(this->blobs_.size(), true);
   bottom_patch_shape_.resize(2);
@@ -60,7 +61,6 @@ void CSCLayer<Dtype>::LayerSetUp(const vector<Blob<Dtype>*>& bottom,
   this->alpha_diff_buffer_ = shared_ptr<Blob<Dtype> > (new Blob<Dtype>());
   this->bottom_patch_buffer_ = shared_ptr<Blob<Dtype> > (new Blob<Dtype>());
   this->bottom_recon_buffer_ = shared_ptr<Blob<Dtype> > (new Blob<Dtype>());
-  CHECK_EQ(this->blobs_[1]->count(), 1);
 }
 
 template <typename Dtype>
@@ -117,7 +117,9 @@ void CSCLayer<Dtype>::Forward_cpu(const vector<Blob<Dtype>*>& bottom,
   Dtype loss = bottom[0]->sumsq_data()/2.;
   Dtype eta = admm_max_rho_;
   Dtype t = 1;
-  Dtype lambda1 = this->blobs_[1]->mutable_cpu_data()[0];
+  Dtype lambda1 = this->blobs_[1]->cpu_data()[0];
+  lambda1 = lambda1 > 1e-5 ? lambda1 : 1e-5;   // threshold to positive value
+  this->blobs_[1]->mutable_cpu_data()[0] = lambda1;
 //  this->extract_patches_cpu_(bottom[0], &bottom_patch);
   this->im2patches_cpu_(bottom[0], &bottom_patch, false);
   caffe_set(alpha.count(), Dtype(0), alpha.mutable_cpu_data());
@@ -216,6 +218,8 @@ void CSCLayer<Dtype>::Backward_cpu(const vector<Blob<Dtype>*>& top,
   Blob<Dtype> &residual = *bottom_patch_buffer_;
   Blob<Dtype> &beta = *beta_buffer_;
   Blob<Dtype> &bottom_recon = *bottom_recon_buffer_;
+  Dtype *beta_data = beta.mutable_cpu_data();
+  Dtype *beta_diff = beta.mutable_cpu_diff();
   // ------------------------------------------------------------------------
   // use beta as buffer for top diff in patch view
   this->permute_num_channels_cpu_(top[0], &beta, true);
@@ -224,8 +228,6 @@ void CSCLayer<Dtype>::Backward_cpu(const vector<Blob<Dtype>*>& top,
   // ------------------------------------------------------------------------
     // solve beta
     // sparse_inverse(lambda2_, this->blobs_[0].get(), &beta);
-    Dtype *beta_data = beta.mutable_cpu_data();
-    Dtype *beta_diff = beta.mutable_cpu_diff();
     for (int i = 0; i < beta.count(); ++i) {
       if (std::fabs(beta_data[i]) < 1e-6) {
         beta_diff[i] = Dtype(0);
@@ -265,8 +267,14 @@ void CSCLayer<Dtype>::Backward_cpu(const vector<Blob<Dtype>*>& top,
       this->blobs_[0]->mutable_cpu_diff());
   // ------------------------------------------------------------------------
   }
-  if (this->param_propagate_down_[0]) {
-    LOG(FATAL) << "Backward of lambda1 is not implemented";
+  if (this->param_propagate_down_[1]) {
+    // LOG(FATAL) << "Backward of lambda1 is not implemented";
+    Dtype lambda1_diff = Dtype(0);
+    for (int i = 0; i < beta.count(); ++i) {
+      lambda1_diff += beta_diff[i];
+    }
+    lambda1_diff /= bottom[0]->shape(0) * admm_max_rho_;
+    this->blobs_[1]->mutable_cpu_diff()[0] = -lambda1_diff;
   }
   if (propagate_down[0]) {
     caffe_copy(bottom[0]->count(), bottom_recon.cpu_data(),
