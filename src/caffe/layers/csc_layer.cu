@@ -244,6 +244,7 @@ void CSCLayer<Dtype>::Forward_gpu(const vector<Blob<Dtype>*>& bottom,
         break; 
       }
       eta *= admm_eta_;
+      CHECK_LE(eta, 1e6) << "Value of lambda_max(DtD) blows up!";
     }
   }
   int patch_width = top[0]->shape(2)*top[0]->shape(3);
@@ -264,7 +265,7 @@ void CSCLayer<Dtype>::Forward_gpu(const vector<Blob<Dtype>*>& bottom,
 template <typename Dtype>
 __global__ void set_if_kernel(const int n, const Dtype *data, Dtype *diff) {
   CUDA_KERNEL_LOOP(index, n) {
-    if (std::fabs(data[index]) < 1e-6) {
+    if (std::fabs(data[index]) < 1e-9) {
       diff[index] = Dtype(0);
     }
   }

@@ -170,6 +170,7 @@ void CSCLayer<Dtype>::Forward_cpu(const vector<Blob<Dtype>*>& bottom,
         break; 
       }
       eta *= admm_eta_;
+      CHECK_LE(eta, 1e6) << "Value of lambda_max(DtD) blows up!";
     }
   }
   int patch_width = top[0]->shape(2)*top[0]->shape(3);
@@ -219,7 +220,7 @@ void CSCLayer<Dtype>::Backward_cpu(const vector<Blob<Dtype>*>& top,
     Dtype *beta_data = beta.mutable_cpu_data();
     Dtype *beta_diff = beta.mutable_cpu_diff();
     for (int i = 0; i < beta.count(); ++i) {
-      if (std::fabs(beta_data[i]) < 1e-6) {
+      if (std::fabs(beta_data[i]) < 1e-9) {
         beta_diff[i] = Dtype(0);
       }
       // beta_diff[i] /= (lambda2_ + admm_max_rho_);
