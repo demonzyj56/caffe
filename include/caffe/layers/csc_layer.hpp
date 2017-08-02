@@ -102,6 +102,8 @@ class CSCLayer : public Layer<Dtype> {
   shared_ptr<Blob<Dtype> > bottom_patch_buffer_;
   shared_ptr<Blob<Dtype> > bottom_recon_buffer_;
 
+  // whether to update lambda1
+  bool update_lambda1_;
 
 };
 

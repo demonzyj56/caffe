@@ -22,6 +22,7 @@ void CSCLayer<Dtype>::LayerSetUp(const vector<Blob<Dtype>*>& bottom,
   admm_eta_ = static_cast<Dtype>(csc_param.admm_eta());
   lasso_lars_L_ = static_cast<int>(csc_param.lasso_lars_l());
   channels_ = bottom[0]->shape(1);
+  update_lambda1_ = false; // don't update currently
   if (!this->blobs_.empty()) {
     LOG(INFO) << "Skipping parameter initialization";
   } else {
@@ -117,9 +118,12 @@ void CSCLayer<Dtype>::Forward_cpu(const vector<Blob<Dtype>*>& bottom,
   Dtype loss = bottom[0]->sumsq_data()/2.;
   Dtype eta = admm_max_rho_;
   Dtype t = 1;
-  Dtype lambda1 = this->blobs_[1]->cpu_data()[0];
-  lambda1 = lambda1 > 1e-5 ? lambda1 : 1e-5;   // threshold to positive value
-  this->blobs_[1]->mutable_cpu_data()[0] = lambda1;
+  Dtype lambda1 = lambda1_;
+  if (update_lambda1_) {
+    lambda1 = this->blobs_[1]->cpu_data()[0];
+    lambda1 = lambda1 > 1e-5 ? lambda1 : 1e-5;   // threshold to positive value
+    this->blobs_[1]->mutable_cpu_data()[0] = lambda1;
+  }
 //  this->extract_patches_cpu_(bottom[0], &bottom_patch);
   this->im2patches_cpu_(bottom[0], &bottom_patch, false);
   caffe_set(alpha.count(), Dtype(0), alpha.mutable_cpu_data());
@@ -268,7 +272,7 @@ void CSCLayer<Dtype>::Backward_cpu(const vector<Blob<Dtype>*>& top,
       this->blobs_[0]->mutable_cpu_diff());
   // ------------------------------------------------------------------------
   }
-  if (this->param_propagate_down_[1]) {
+  if (this->param_propagate_down_[1] && update_lambda1_) {
     // LOG(FATAL) << "Backward of lambda1 is not implemented";
     Dtype lambda1_diff = Dtype(0);
     for (int i = 0; i < beta.count(); ++i) {

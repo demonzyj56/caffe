@@ -203,11 +203,14 @@ void CSCLayer<Dtype>::Forward_gpu(const vector<Blob<Dtype>*>& bottom,
     bottom_patch.shape(1), this->blobs_[0]->shape(0), Dtype(-1),
     this->blobs_[0]->gpu_data(), bottom_patch.gpu_data(), Dtype(0),
     grad.mutable_gpu_data());
-  Dtype lambda1 = this->get_lambda1_gpu_data_();
-  if (lambda1 < 1e-5) {
-    LOG(INFO) << "lambda1 value: " << lambda1 
-      << " below threshold of 1e-5, thresholding to 1e-5";
-    this->set_lambda1_gpu_data_(lambda1);
+  Dtype lambda1 = lambda1_;
+  if (update_lambda1_) {
+    lambda1 = this->get_lambda1_gpu_data_();
+    if (lambda1 < 1e-5) {
+      LOG(INFO) << "lambda1 value: " << lambda1 
+        << " below threshold of 1e-5, thresholding to 1e-5";
+      this->set_lambda1_gpu_data_(lambda1);
+    }
   }
   for (int tt = 0; tt < admm_max_iter_; ++tt) {
     while (true) {
@@ -328,7 +331,7 @@ void CSCLayer<Dtype>::Backward_gpu(const vector<Blob<Dtype>*>& top,
       this->blobs_[0]->mutable_gpu_diff());
   // ------------------------------------------------------------------------
   }
-  if (this->param_propagate_down_[1]) {
+  if (this->param_propagate_down_[1] && update_lambda1_) {
     // TODO(leoyolo): change to a reduction kernel
     Blob<Dtype> *buf = this->alpha_.get();
     caffe_gpu_set(buf->count(), Dtype(1), buf->mutable_gpu_data());
