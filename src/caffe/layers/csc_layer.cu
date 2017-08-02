@@ -342,6 +342,8 @@ void CSCLayer<Dtype>::Backward_gpu(const vector<Blob<Dtype>*>& top,
     this->set_lambda1_gpu_diff_(-lambda1_diff);
     /* LOG(INFO) << "admm_max_rho_: " << admm_max_rho_ << "\n"; */
     /* LOG(INFO) << "lambda1_diff" << lambda1_diff << "\n"; */
+  } else {
+    this->set_lambda1_gpu_diff_(Dtype(0));
   }
   if (propagate_down[0]) {
     caffe_copy(bottom[0]->count(), bottom_recon.gpu_data(),
