@@ -1441,5 +1441,9 @@ message CSCParameter {
 
   // filler type for the dictionary
   optional FillerParameter filler = 10;
+  // verbose logging
+  optional bool verbose = 12 [default = false];
+  // whether to update lambda in backward?
+  optional bool update_lambda1 = 13 [default = false];
 
 }

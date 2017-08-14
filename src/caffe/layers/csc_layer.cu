@@ -204,12 +204,13 @@ void CSCLayer<Dtype>::Forward_gpu(const vector<Blob<Dtype>*>& bottom,
     this->blobs_[0]->gpu_data(), bottom_patch.gpu_data(), Dtype(0),
     grad.mutable_gpu_data());
   Dtype lambda1 = lambda1_;
-  if (update_lambda1_) {
+  Dtype obj = 0.;
+  if (1) {
     lambda1 = this->get_lambda1_gpu_data_();
     if (lambda1 < 1e-5) {
-      LOG(INFO) << "lambda1 value: " << lambda1 
+      LOG_IF(INFO, verbose_) << "lambda1 value: " << lambda1 
         << " below threshold of 1e-5, thresholding to 1e-5";
-      this->set_lambda1_gpu_data_(lambda1);
+      this->set_lambda1_gpu_data_(1e-5);
     }
   }
   for (int tt = 0; tt < admm_max_iter_; ++tt) {
@@ -255,6 +256,14 @@ void CSCLayer<Dtype>::Forward_gpu(const vector<Blob<Dtype>*>& bottom,
       eta *= admm_eta_;
       CHECK_LE(eta, 1e6) << "Value of lambda_max(DtD) blows up!";
     }
+    Dtype new_obj = loss + this->alpha_->asum_data()*lambda1;
+    Dtype relative_error = std::fabs((new_obj-obj)/new_obj);
+    if (relative_error < 1e-6) {
+      LOG_IF(INFO, verbose_) << "Early stopping at iteration " << tt;
+      break;
+    } else {
+      obj = new_obj;
+    }
   }
   int patch_width = top[0]->shape(2)*top[0]->shape(3);
   for (int i = 0; i < top[0]->shape(0)*top[0]->shape(1); ++i) {
@@ -266,9 +275,10 @@ void CSCLayer<Dtype>::Forward_gpu(const vector<Blob<Dtype>*>& bottom,
       top[0]->mutable_gpu_data() + top_to);
   }
   admm_max_rho_ = eta;
-  /* LOG(INFO) << "Nonzeros per column: " */
-  /*   << (Dtype)this->caffe_zero_norm_(beta.count(), beta.cpu_data())/beta.shape(1) */
-  /*   << " eta: " << eta; */
+  LOG_IF(INFO, verbose_) << "Nonzeros per column: "
+    << (Dtype)this->caffe_zero_norm_(beta.count(), beta.cpu_data())/beta.shape(1)
+    << " eta: " << eta
+    << " lambda1: " << lambda1;
 }
 
 template <typename Dtype>
@@ -294,15 +304,16 @@ void CSCLayer<Dtype>::Backward_gpu(const vector<Blob<Dtype>*>& top,
   // ------------------------------------------------------------------------
   // use beta as buffer for top diff in patch view
   this->permute_num_channels_gpu_(top[0], &beta, true);
+  Dtype *beta_data = beta.mutable_gpu_data();
+  Dtype *beta_diff = beta.mutable_gpu_diff();
+  // solve beta
+  set_if_kernel<Dtype><<<CAFFE_GET_BLOCKS(beta.count()), CAFFE_CUDA_NUM_THREADS>>>(
+    beta.count(), beta_data, beta_diff);
+  CUDA_POST_KERNEL_CHECK;
+  caffe_gpu_scal(beta.count(), Dtype(1./admm_max_rho_), beta_diff);
   // ------------------------------------------------------------------------
   if (this->param_propagate_down_[0]) {
   // ------------------------------------------------------------------------
-    Dtype *beta_data = beta.mutable_gpu_data();
-    Dtype *beta_diff = beta.mutable_gpu_diff();
-    // solve beta
-    set_if_kernel<Dtype><<<CAFFE_GET_BLOCKS(beta.count()), CAFFE_CUDA_NUM_THREADS>>>(
-      beta.count(), beta_data, beta_diff);
-	CUDA_POST_KERNEL_CHECK;
   // ------------------------------------------------------------------------
   // ------------------------------------------------------------------------
     //first term
@@ -331,14 +342,14 @@ void CSCLayer<Dtype>::Backward_gpu(const vector<Blob<Dtype>*>& top,
       this->blobs_[0]->mutable_gpu_diff());
   // ------------------------------------------------------------------------
   }
-  if (this->param_propagate_down_[1] && update_lambda1_) {
+  if (this->param_propagate_down_[1]) {
     // TODO(leoyolo): change to a reduction kernel
     Blob<Dtype> *buf = this->alpha_.get();
     caffe_gpu_set(buf->count(), Dtype(1), buf->mutable_gpu_data());
     Dtype lambda1_diff = 0;
-    caffe_gpu_dot(beta.count(), buf->gpu_data(), beta.gpu_data(),
+    caffe_gpu_dot(beta.count(), buf->gpu_data(), beta_diff,
       &lambda1_diff);
-    lambda1_diff /= bottom[0]->shape(0) * admm_max_rho_;
+    lambda1_diff /= bottom[0]->shape(0);
     this->set_lambda1_gpu_diff_(-lambda1_diff);
     /* LOG(INFO) << "admm_max_rho_: " << admm_max_rho_ << "\n"; */
     /* LOG(INFO) << "lambda1_diff" << lambda1_diff << "\n"; */

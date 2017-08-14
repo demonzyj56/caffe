@@ -71,6 +71,9 @@ class SolverWrapper(object):
         plt.show()
         plt.pause(0.05)
 
+    def _visualize_dict(self):
+        pass
+
     def snapshot(self):
         """ snapshot at the same directory"""
         net = self.solver.net
@@ -83,7 +86,7 @@ class SolverWrapper(object):
 
 if __name__ == '__main__':
     caffe.set_mode_gpu()
-    caffe.set_device(0)
+    caffe.set_device(5)
     if _DEBUG:
         solver_prototxt = os.path.join(os.path.dirname(__file__),
                                        'cifar10_csc_solver_debug.prototxt')
@@ -91,6 +94,6 @@ if __name__ == '__main__':
         solver_prototxt = os.path.join(os.path.dirname(__file__),
                                        'cifar10_csc_solver.prototxt')
     solver = SolverWrapper(solver_prototxt)
-    solver.train_model(1000)
+    solver.train_model(10000)
     from IPython import embed; embed()
 

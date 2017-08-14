@@ -104,6 +104,8 @@ class CSCLayer : public Layer<Dtype> {
 
   // whether to update lambda1
   bool update_lambda1_;
+  // whether to display verbose information
+  bool verbose_;
 
 };
 

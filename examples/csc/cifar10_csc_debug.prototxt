@@ -1,6 +1,6 @@
-name: "mnist_csc"
+name: "CIFAR10_csc_debug"
 layer {
-  name: "mnist"
+  name: "cifar"
   type: "Data"
   top: "data"
   top: "label"
@@ -8,17 +8,17 @@ layer {
     phase: TRAIN
   }
   transform_param {
+    mean_file: "examples/cifar10/mean.binaryproto"
     scale: 0.00390625
   }
   data_param {
-    source: "examples/mnist/mnist_train_lmdb"
-    batch_size: 25
+    source: "examples/cifar10/cifar10_train_lmdb"
+    batch_size: 64
     backend: LMDB
-    prefetch: 16
   }
 }
 layer {
-  name: "mnist"
+  name: "cifar"
   type: "Data"
   top: "data"
   top: "label"
@@ -26,10 +26,11 @@ layer {
     phase: TEST
   }
   transform_param {
+    mean_file: "examples/cifar10/mean.binaryproto"
     scale: 0.00390625
   }
   data_param {
-    source: "examples/mnist/mnist_test_lmdb"
+    source: "examples/cifar10/cifar10_test_lmdb"
     batch_size: 100
     backend: LMDB
   }
@@ -42,43 +43,32 @@ layer {
   csc_param {
     kernel_h: 6
     kernel_w: 6
-    num_output: 400
-    admm_max_iter: 10
-    admm_eta: 1.5
-    lambda1: 0.1
+    num_output: 200
+    admm_max_iter: 1000
+    admm_eta: 1.1
+    lambda1: 0.01
     lambda2: 1
+    admm_max_rho: 1
+    verbose: true
     filler {
         type: "xavier"
     }
     boundary: NOPAD
   }
+  param {
+    lr_mult: 1
+    decay_mult: 1
+  }
+  param {
+    lr_mult: 0
+    decay_mult: 1
+  }
 }
 layer {
   name: "bn"
   type: "BatchNorm"
   bottom: "csc"
   top: "bn"
-  include {
-    phase: TRAIN
-  }
-  batch_norm_param {
-    use_global_stats: false
-  }
-  param { lr_mult: 0 }
-  param { lr_mult: 0 }
-  param { lr_mult: 0 }
-}
-layer {
-  name: "bn"
-  type: "BatchNorm"
-  bottom: "csc"
-  top: "bn"
-  include {
-    phase: TEST
-  }
-  batch_norm_param {
-    use_global_stats: true
-  }
   param { lr_mult: 0 }
   param { lr_mult: 0 }
   param { lr_mult: 0 }
@@ -99,8 +89,8 @@ layer {
   top: "pool"
   pooling_param {
     pool: MAX
-    kernel_size: 12
-    stride: 11
+    kernel_size: 14
+    stride: 13
   }
 }
 layer {

@@ -6,25 +6,28 @@ net: "examples/csc/cifar10_csc.prototxt"
 # test_iter specifies how many forward passes the test should carry out
 # In the case of CIFAR10, we have test batch size 100 and 100 test iterations,
 # covering the full 10,000 testing images.
-test_iter: 100
+test_iter: 200
 # Carry out testing every 1000 training iterations.
 test_interval: 500
 # The base learning rate, momentum and the weight decay of the network.
 base_lr: 0.01
 momentum: 0.9
 weight_decay: 0.005
+
 # The learning rate policy
-# lr_policy: "step"
 lr_policy: "fixed"
-gamma: 0.9
-stepsize: 500
+# lr_policy: "step"
+# gamma: 0.9
+# stepsize: 500
 # Display every 200 iterations
 display: 20
 # The maximum number of iterations: 100 epochs for cifar10
-max_iter: 50000
+max_iter: 2000
 # snapshot intermediate results
-snapshot_prefix: "examples/csc/csc_cifar10"
+snapshot_prefix: "examples/csc/csc_cifar10_lr1"
+snapshot: 1000
 # solver mode: CPU or GPU
 solver_mode: GPU
 # debug_info: true
-
+# Disable first test
+test_initialization: false

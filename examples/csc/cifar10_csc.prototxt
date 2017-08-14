@@ -13,9 +13,8 @@ layer {
   }
   data_param {
     source: "examples/cifar10/cifar10_train_lmdb"
-    batch_size: 25    # dispatch to 4 GPUs
+    batch_size: 25
     backend: LMDB
-    prefetch: 16
   }
 }
 layer {
@@ -32,7 +31,7 @@ layer {
   }
   data_param {
     source: "examples/cifar10/cifar10_test_lmdb"
-    batch_size: 100
+    batch_size: 50
     backend: LMDB
   }
 }
@@ -42,17 +41,25 @@ layer {
   bottom: "data"
   top: "csc"
   csc_param {
-    kernel_h: 6
-    kernel_w: 6
-    num_output: 1600
-    admm_max_iter: 10
-    admm_eta: 1.5
-    lambda1: 0.1
+    kernel_h: 5
+    kernel_w: 5
+    num_output: 200
+    admm_max_iter: 1000
+    admm_eta: 1.1
+    lambda1: 0.01
     lambda2: 1.
     filler {
         type: "xavier"
     }
-    boundary: NOPAD
+    boundary: PAD_BOTH
+  }
+  param {
+    lr_mult: 1
+    decay_mult: 1
+  }
+  param {
+    lr_mult: 0
+    decay_mult: 0
   }
 }
 layer {
@@ -60,27 +67,6 @@ layer {
   type: "BatchNorm"
   bottom: "csc"
   top: "bn"
-  include {
-    phase: TRAIN
-  }
-  batch_norm_param {
-    use_global_stats: false
-  }
-  param { lr_mult: 0 }
-  param { lr_mult: 0 }
-  param { lr_mult: 0 }
-}
-layer {
-  name: "bn"
-  type: "BatchNorm"
-  bottom: "csc"
-  top: "bn"
-  include {
-    phase: TEST
-  }
-  batch_norm_param {
-    use_global_stats: true
-  }
   param { lr_mult: 0 }
   param { lr_mult: 0 }
   param { lr_mult: 0 }
@@ -101,8 +87,8 @@ layer {
   top: "pool"
   pooling_param {
     pool: MAX
-    kernel_size: 14
-    stride: 13
+    kernel_size: 16
+    stride: 16
   }
 }
 layer {

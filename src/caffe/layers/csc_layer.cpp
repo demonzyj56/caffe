@@ -21,8 +21,9 @@ void CSCLayer<Dtype>::LayerSetUp(const vector<Blob<Dtype>*>& bottom,
   admm_max_rho_ = static_cast<Dtype>(csc_param.admm_max_rho());
   admm_eta_ = static_cast<Dtype>(csc_param.admm_eta());
   lasso_lars_L_ = static_cast<int>(csc_param.lasso_lars_l());
+  verbose_ = csc_param.verbose();
+  update_lambda1_ = csc_param.update_lambda1();
   channels_ = bottom[0]->shape(1);
-  update_lambda1_ = false; // don't update currently
   if (!this->blobs_.empty()) {
     LOG(INFO) << "Skipping parameter initialization";
   } else {
@@ -85,8 +86,8 @@ void CSCLayer<Dtype>::Reshape(const vector<Blob<Dtype>*>& bottom,
   top_patch_shape_.resize(2);
   top_patch_shape_[0] = num_output_;
   top_patch_shape_[1] = bottom_patch_shape_[1];
-  // this->alpha_->Reshape(top_patch_shape_);
-  //caffe_set(this->alpha_->count(), Dtype(0), this->alpha_->mutable_cpu_data());
+  // admm_max_rho_ = std::max(admm_max_rho_ / admm_eta_,
+  //   static_cast<Dtype>(this->layer_param_.csc_param().admm_max_rho()));
   admm_max_rho_ = static_cast<Dtype>(this->layer_param_.csc_param().admm_max_rho());
   // reshape buffer
   this->alpha_->Reshape(top_patch_shape_);
@@ -119,7 +120,7 @@ void CSCLayer<Dtype>::Forward_cpu(const vector<Blob<Dtype>*>& bottom,
   Dtype eta = admm_max_rho_;
   Dtype t = 1;
   Dtype lambda1 = lambda1_;
-  if (update_lambda1_) {
+  if (1) {
     lambda1 = this->blobs_[1]->cpu_data()[0];
     lambda1 = lambda1 > 1e-5 ? lambda1 : 1e-5;   // threshold to positive value
     this->blobs_[1]->mutable_cpu_data()[0] = lambda1;
@@ -272,7 +273,7 @@ void CSCLayer<Dtype>::Backward_cpu(const vector<Blob<Dtype>*>& top,
       this->blobs_[0]->mutable_cpu_diff());
   // ------------------------------------------------------------------------
   }
-  if (this->param_propagate_down_[1] && update_lambda1_) {
+  if (this->param_propagate_down_[1]) {
     // LOG(FATAL) << "Backward of lambda1 is not implemented";
     Dtype lambda1_diff = Dtype(0);
     for (int i = 0; i < beta.count(); ++i) {
