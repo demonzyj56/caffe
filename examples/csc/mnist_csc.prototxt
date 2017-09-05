@@ -14,7 +14,6 @@ layer {
     source: "examples/mnist/mnist_train_lmdb"
     batch_size: 25
     backend: LMDB
-    prefetch: 16
   }
 }
 layer {
@@ -40,45 +39,39 @@ layer {
   bottom: "data"
   top: "csc"
   csc_param {
-    kernel_h: 6
-    kernel_w: 6
+    kernel_h: 5
+    kernel_w: 5
     num_output: 400
     admm_max_iter: 10
-    admm_eta: 1.5
+    admm_max_rho: 1
+    admm_eta: 1.1
     lambda1: 0.1
     lambda2: 1
+    verbose: false
     filler {
         type: "xavier"
     }
     boundary: NOPAD
   }
+  param { lr_mult: 1 }
+  param { lr_mult: 0 }
+}
+layer {
+  name: "pool"
+  type: "Pooling"
+  bottom: "csc"
+  top: "pool"
+  pooling_param {
+    pool: MAX
+    kernel_size: 12
+    stride: 12
+  }
 }
 layer {
   name: "bn"
   type: "BatchNorm"
-  bottom: "csc"
+  bottom: "pool"
   top: "bn"
-  include {
-    phase: TRAIN
-  }
-  batch_norm_param {
-    use_global_stats: false
-  }
-  param { lr_mult: 0 }
-  param { lr_mult: 0 }
-  param { lr_mult: 0 }
-}
-layer {
-  name: "bn"
-  type: "BatchNorm"
-  bottom: "csc"
-  top: "bn"
-  include {
-    phase: TEST
-  }
-  batch_norm_param {
-    use_global_stats: true
-  }
   param { lr_mult: 0 }
   param { lr_mult: 0 }
   param { lr_mult: 0 }
@@ -93,20 +86,26 @@ layer {
   }
 }
 layer {
-  name: "pool"
-  type: "Pooling"
+  name: "relu"
+  type: "ReLU"
   bottom: "bn"
-  top: "pool"
-  pooling_param {
-    pool: MAX
-    kernel_size: 12
-    stride: 11
-  }
+  top: "bn"
 }
+# layer {
+#   name: "pool"
+#   type: "Pooling"
+#   bottom: "bn"
+#   top: "pool"
+#   pooling_param {
+#     pool: MAX
+#     kernel_size: 12
+#     stride: 11
+#   }
+# }
 layer {
   name: "ip"
   type: "InnerProduct"
-  bottom: "pool"
+  bottom: "bn"
   top: "ip"
   param {
     lr_mult: 1
