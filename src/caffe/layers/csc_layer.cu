@@ -230,8 +230,13 @@ void CSCLayer<Dtype>::Forward_gpu(const vector<Blob<Dtype>*>& bottom,
       Dtype dot_val = 0.;
       caffe_gpu_dot(alpha_diff.count(), grad.gpu_data(), alpha_diff.gpu_data(), &dot_val);
       Dtype stop = loss + dot_val  + alpha_diff.sumsq_data()*eta/2. - loss_new;
-	  /* LOG(INFO) << "Stop: " << stop; */
+      /* if (stop < -1e-6) { */
+      /*   eta *= admm_eta_; */
+      /*   CHECK_LE(eta, 1e6) << "Value of lambda_max(DtD) blows up!"; */
+      /*   continue; */
+      /* } */
       if (stop >= 0) {
+      /* if (1) { */
         Dtype t_new = (1 + std::sqrt(1+4*t*t)) / 2.;
         Dtype coeff = (t-1) / t_new;
         caffe_copy(alpha.count(), alpha.gpu_data(), this->alpha_->mutable_gpu_data());
