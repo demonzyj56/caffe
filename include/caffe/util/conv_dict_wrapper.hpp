@@ -4,7 +4,7 @@
 #include "caffe/common.hpp"
 #include "caffe/blob.hpp"
 #include "caffe/proto/caffe.pb.h"
-// #include "cusparse.h"
+#include "cusparse.h"
 // #include "cusolverDn.h"
 // #include "cusolverSp.h"
 
@@ -34,7 +34,38 @@ void make_conv_dict_gpu(const int n, const int m, const Dtype *Dl, const int N,
 //     int r_;
 //     int c_;
 //     int nnz_;
+//     Dtype *d_values_;
+//     int *columns_;
+//     int *ptrB_;
 // };
+
+/*
+ * A wrapper for the cusparse handle.
+ * Notice the program dies as long as creating the handle is not successful.
+ * This is to remind that the handle should be created only when needed.
+ * */
+class CusparseHandle {
+public:
+    CusparseHandle() : handle_(NULL) {
+        CHECK_EQ(CUSPARSE_STATUS_SUCCESS, cusparseCreate(&handle_))
+            << "Unable to create cusparse handle!";
+    }
+    ~CusparseHandle() {
+        cusparseStatus_t status = cusparseDestroy(handle_);
+        LOG_IF(INFO, CUSPARSE_STATUS_SUCCESS != status)
+            << "Destroying the cusparse handle is not successful!";
+        LOG_IF(INFO, CUSPARSE_STATUS_NOT_INITIALIZED == status)
+            << "The handle is not initialized!";
+    }
+    cusparseHandle_t *get() {
+        return &handle_;
+    }
+
+private:
+    cusparseHandle_t handle_;
+
+    DISABLE_COPY_AND_ASSIGN(CusparseHandle);
+};
 
 
 /*
