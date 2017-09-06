@@ -55,6 +55,7 @@
 
 # YCM cofing files or compile_commands
 .ycm_extra_conf.py
+.color_coded
 compile_commands.json
 
 ## Caffe
