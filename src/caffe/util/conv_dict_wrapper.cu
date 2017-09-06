@@ -38,7 +38,7 @@ __global__ void index_inc_kernel(const int vec_len, const int inc, int *y) {
 // Standalone funtion to create a zero-based sparse CSR format convolutional dictionary
 // from a dense local dictionary Dl.
 // Dl has row n and column m, and d_values and d_columns have length n*m*N, d_ptrB have
-// length m*N + 1.
+// length N + 1.
 template <typename Dtype>
 void make_conv_dict_gpu(const int n, const int m, const Dtype *d_Dl, const int N,
     CSCParameter::Boundary boundary, Dtype *d_values, int *d_columns, int *d_ptrB) {
