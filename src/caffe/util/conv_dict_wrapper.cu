@@ -52,6 +52,23 @@ void make_conv_dict_gpu(const int n, const int m, const Dtype *d_Dl, const int N
         N+1, n*m, d_ptrB);
 }
 
+// The creation of identity is in cu file because it requires a iota like kernel.
+template <typename Dtype>
+CSRWrapper<Dtype> &CSRWrapper<Dtype>::identity() {
+    CHECK_EQ(row(), col());
+    CHECK_EQ(row(), nnz());
+    caffe_gpu_set(nnz(), Dtype(1), mutable_values());
+    index_inc_kernel<Dtype><<<CAFFE_GET_BLOCKS(nnz()), CAFFE_CUDA_NUM_THREADS>>>(
+        nnz(), 1, mutable_columns());
+    index_inc_kernel<Dtype><<<CAFFE_GET_BLOCKS(row()+1), CAFFE_CUDA_NUM_THREADS>>>(
+        row()+1, 1, mutable_ptrB());
+    return *this;
+}
+
+// require instaniation
+template CSRWrapper<float>  &CSRWrapper<float>::identity();
+template CSRWrapper<double> &CSRWrapper<double>::identity();
+
 template void make_conv_dict_gpu<float>(const int n, const int m, const float *d_Dl, const int N,
     CSCParameter::Boundary boundary, float *d_values, int *d_columns, int *d_ptrB);
 template void make_conv_dict_gpu<double>(const int n, const int m, const double *d_Dl, const int N,

@@ -58,11 +58,17 @@ TYPED_TEST(CSRWrapperTest, TestCreation) {
     EXPECT_EQ(this->csr_wrapper_->nnz(), this->nnz_);
 }
 
+TYPED_TEST(CSRWrapperTest, TestSetNnz) {
+    this->csr_wrapper_->set_nnz(10);
+    EXPECT_EQ(this->csr_wrapper_->nnz(), 10);
+}
+
 TYPED_TEST(CSRWrapperTest, TestSetValues) {
     const TypeParam values[] = {1., -1., -3., -2., 5., 4., 6., 4., -4., 2., 7., 8., -5.};
     TypeParam h_values[13];
     this->csr_wrapper_->set_values(values);
-    CUDA_CHECK(cudaMemcpy(h_values, this->csr_wrapper_->values(), 13*sizeof(TypeParam), cudaMemcpyDeviceToHost));
+    CUDA_CHECK(cudaMemcpy(h_values, this->csr_wrapper_->values(), 13*sizeof(TypeParam),
+        cudaMemcpyDeviceToHost));
     for (int i = 0; i < 13; ++i) {
         EXPECT_EQ(h_values[i], values[i]);
     }
@@ -131,6 +137,56 @@ TYPED_TEST(CSRWrapperTest, TestSetIndexBase) {
     for (int i = 0; i < 2; ++i) {
         this->csr_wrapper_->set_index_base(index_bases[i]);
         EXPECT_EQ(cusparseGetMatIndexBase(this->csr_wrapper_->descr()), index_bases[i]);
+    }
+}
+
+TYPED_TEST(CSRWrapperTest, TestTranspose) {
+    const TypeParam values[] = {1., -1., -3., -2., 5., 4., 6., 4., -4., 2., 7., 8., -5.};
+    const TypeParam values_t[] = {1., -2., -4., -1., 5., 8., 4., 2., -3., 6., 7., 4., -5.};
+    const int columns[] = {0, 1, 3, 0, 1, 2, 3, 4, 0, 2, 3, 1, 4};
+    const int columns_t[] = {0, 1, 3, 0, 1, 4, 2, 3, 0, 2, 3, 2, 4};
+    const int ptrB[] = {0, 3, 5, 8, 11, 13};
+    const int ptrB_t[] = {0, 3, 6, 8, 11, 13};
+    TypeParam h_values_t[13];
+    int h_columns_t[13];
+    int h_ptrB_t[6];
+    this->csr_wrapper_->set_values(values);
+    this->csr_wrapper_->set_columns(columns);
+    this->csr_wrapper_->set_ptrB(ptrB);
+    shared_ptr<CSRWrapper<TypeParam> > mat_trans = this->csr_wrapper_->transpose();
+    CUDA_CHECK(cudaMemcpy(h_values_t, mat_trans->values(), 13*sizeof(TypeParam),
+        cudaMemcpyDeviceToHost));
+    CUDA_CHECK(cudaMemcpy(h_columns_t, mat_trans->columns(), 13*sizeof(int), 
+        cudaMemcpyDeviceToHost));
+    CUDA_CHECK(cudaMemcpy(h_ptrB_t, mat_trans->ptrB(), 6*sizeof(int),
+        cudaMemcpyDeviceToHost));
+    for (int i = 0; i < 13; ++i) {
+        EXPECT_EQ(values_t[i], h_values_t[i]);
+        EXPECT_EQ(columns_t[i], h_columns_t[i]);
+    }
+    for (int i = 0; i < 6; ++i) {
+        EXPECT_EQ(ptrB_t[i], h_ptrB_t[i]);
+    }
+}
+
+TYPED_TEST(CSRWrapperTest, TestIdentity) {
+    this->csr_wrapper_->set_nnz(5);
+    this->csr_wrapper_->identity();
+    TypeParam h_values[5];
+    int h_columns[5];
+    int h_ptrB[5];
+    CUDA_CHECK(cudaMemcpy(h_values, this->csr_wrapper_->values(), 5*sizeof(TypeParam),
+        cudaMemcpyDeviceToHost));
+    CUDA_CHECK(cudaMemcpy(h_columns, this->csr_wrapper_->columns(), 5*sizeof(int),
+        cudaMemcpyDeviceToHost));
+    CUDA_CHECK(cudaMemcpy(h_ptrB, this->csr_wrapper_->ptrB(), 6*sizeof(int),
+        cudaMemcpyDeviceToHost));
+    for (int i = 0; i < 5; ++i) {
+        EXPECT_EQ(h_values[i], TypeParam(1));
+        EXPECT_EQ(h_columns[i], i);
+    }
+    for (int i = 0; i < 6; ++i) {
+        EXPECT_EQ(h_ptrB[i], i);
     }
 }
 

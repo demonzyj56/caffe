@@ -56,6 +56,8 @@ private:
  * A wrapper for cusparse matrix.
  * The matrix is zero-based and of csr format.
  * The memory are all located at device side.
+ * Note that the row and column of the matrix are assumed to be invariant,
+ * while the nnz could vary.
  * */
 template <typename Dtype>
 class CSRWrapper {
@@ -66,14 +68,15 @@ public:
     int row() const { return r_; }
     int col() const { return c_; }
     int nnz() const { return nnz_; }
-    const Dtype *values()  const { return d_values_; }
-    const int   *columns() const { return d_columns_; }
-    const int   *ptrB()    const { return d_ptrB_; }
-    const int   *ptrE()    const { return d_ptrB_ + 1; }
-    Dtype *mutable_values()  { return d_values_; }
-    int   *mutable_columns() { return d_columns_; }
-    int   *mutable_ptrB()    { return d_ptrB_; }
-    int   *mutable_ptrE()    { return d_ptrB_ + 1; }
+    const Dtype *values()  { return mutable_values(); }
+    const int   *columns() { return mutable_columns(); }
+    const int   *ptrB()    { return mutable_ptrB(); }
+    const int   *ptrE()    { return mutable_ptrE(); }
+    Dtype *mutable_values(); 
+    int   *mutable_columns();
+    int   *mutable_ptrB();
+    int   *mutable_ptrE() { return mutable_ptrB() + 1; }
+    void set_nnz(int nnz);
     void set_values(const Dtype *values);
     void set_columns(const int *columns);
     void set_ptrB(const int *ptrB);
@@ -82,6 +85,8 @@ public:
     void set_fill_mode(cusparseFillMode_t cusparse_fill_mode);
     void set_diag_type(cusparseDiagType_t cusparse_diag_type);
     void set_index_base(cusparseIndexBase_t cusparse_index_base);
+    shared_ptr<CSRWrapper<Dtype> > transpose();
+    CSRWrapper<Dtype> &identity();
 
 private:
     cusparseHandle_t *handle_;
