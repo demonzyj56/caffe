@@ -5,28 +5,29 @@ namespace caffe {
 template <typename Dtype>
 __global__ void set_shifted_kernel(const int vec_len, int n, int m, const Dtype *x,
     Dtype *y) {
-    int nm = n * m;
     CUDA_KERNEL_LOOP(index, vec_len) {
-        int shift_level = index / nm;
-        int shift = index % nm;
-        int c = shift % m;
-        int r = (shift_level - shift / m + n) % n;
-        y[index] = x[r * m + c];
+        int conv_row = index / (n*m);
+        int conv_col = index % (n*m);
+        int block = conv_col / m;
+        int col = conv_col % m;
+        conv_row = conv_row > (n-1) ? (n-1) : conv_row;
+        int row = (conv_row - block + n) % n;
+        y[index] = x[row * m + col];
     }
 }
 
 template <typename Dtype>
 __global__ void index_shifted_kernel(const int vec_len, int n, int m, int N, int *y) {
-    int nm = n * m;
     CUDA_KERNEL_LOOP(index, vec_len) {
-        int shift_level = index / nm;
-        int shift = index % nm;
-        int c = shift % m;
-        int r = shift / m;
-        int column = ((r > shift_level ? r - n : r) + N) % N;
-        y[index] = column * m + c;
+        int i = index / (n*m);
+        int j_index = index % (n*m);
+        int col = j_index % m;
+        int j = j_index / m;
+        int block = i >= n ? (i + j - n + 1) : (i >= j ? j : (N-n+j));
+        y[index] = block * m + col;
     }
 }
+
 
 template <typename Dtype>
 __global__ void index_inc_kernel(const int vec_len, const int inc, int *y) {

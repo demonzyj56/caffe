@@ -190,4 +190,180 @@ TYPED_TEST(CSRWrapperTest, TestIdentity) {
     }
 }
 
+TYPED_TEST(CSRWrapperTest, TestToDense) {
+    const TypeParam values[] = {1., -1., -3., -2., 5., 4., 6., 4., -4., 2., 7., 8., -5.};
+    const int columns[] = {0, 1, 3, 0, 1, 2, 3, 4, 0, 2, 3, 1, 4};
+    const int ptrB[] = {0, 3, 5, 8, 11, 13};
+    this->csr_wrapper_->set_values(values);
+    this->csr_wrapper_->set_columns(columns);
+    this->csr_wrapper_->set_ptrB(ptrB);
+    SyncedMemory dense(this->r_*this->c_*sizeof(TypeParam));
+    this->csr_wrapper_->to_dense((TypeParam *)dense.mutable_gpu_data());
+    const TypeParam *cpu_ptr = (const TypeParam *)dense.cpu_data();
+    for (int r = 0; r < this->r_; ++r) {
+        for (int c = ptrB[r]; c < ptrB[r+1]; ++c) {
+            int column = columns[c];
+            EXPECT_EQ(values[c], cpu_ptr[r*this->c_+column]);
+        }
+    }
+}
+
+template <typename Dtype>
+class CSRWrapperTransposeTest : public GPUDeviceTest<Dtype> {
+protected:
+    CSRWrapperTransposeTest()
+        : handle_(), csr_wrapper_(new CSRWrapper<Dtype>(handle_.get(), 3, 5, 8)) {
+        const Dtype values[] = {1., -1., -3., -2., 5., 4., 6., 4.};
+        const int columns[] = {0, 1, 3, 0, 1, 2, 3, 4};
+        const int ptrB[] = {0, 3, 5, 8};
+        csr_wrapper_->set_values(values);
+        csr_wrapper_->set_columns(columns);
+        csr_wrapper_->set_ptrB(ptrB);
+        csr_trans_ = csr_wrapper_->transpose();
+    }
+    virtual ~CSRWrapperTransposeTest() {
+        delete csr_wrapper_;
+    }
+
+    CusparseHandle handle_;
+    CSRWrapper<Dtype> * const csr_wrapper_;
+    shared_ptr<CSRWrapper<Dtype> > csr_trans_;
+};
+
+TYPED_TEST_CASE(CSRWrapperTransposeTest, TestDtypes);
+
+TYPED_TEST(CSRWrapperTransposeTest, TestTransposeShape) {
+    EXPECT_EQ(this->csr_wrapper_->row(), this->csr_trans_->col());
+    EXPECT_EQ(this->csr_wrapper_->col(), this->csr_trans_->row());
+    EXPECT_EQ(this->csr_wrapper_->nnz(), this->csr_trans_->nnz());
+}
+
+TYPED_TEST(CSRWrapperTransposeTest, TestTransposeValues) {
+    const TypeParam h_values_t[] = {1., -2., -1., 5., 4., -3., 6., 4.};
+    TypeParam h_values[8];
+    CUDA_CHECK(cudaMemcpy(h_values, this->csr_trans_->values(), 8*sizeof(TypeParam),
+        cudaMemcpyDeviceToHost));
+    for (int i = 0; i < 8; ++i) {
+        EXPECT_EQ(h_values_t[i], h_values[i]);
+    }
+}
+
+TYPED_TEST(CSRWrapperTransposeTest, TestTransposeColumns) {
+    const int h_columns_t[] = {0, 1, 0, 1, 2, 0, 2, 2};
+    int h_columns[8];
+    CUDA_CHECK(cudaMemcpy(h_columns, this->csr_trans_->columns(), 8*sizeof(int),
+        cudaMemcpyDeviceToHost));
+    for (int i = 0; i < 8; ++i) {
+        EXPECT_EQ(h_columns_t[i], h_columns[i]);
+    }
+}
+
+TYPED_TEST(CSRWrapperTransposeTest, TestTransposePtrB) {
+    const int h_ptrB_t[] = {0, 2, 4, 5, 7, 8};
+    int h_ptrB[6];
+    CUDA_CHECK(cudaMemcpy(h_ptrB, this->csr_trans_->ptrB(), 6*sizeof(int),
+        cudaMemcpyDeviceToHost));
+    for (int i = 0; i < 6; ++i) {
+        EXPECT_EQ(h_ptrB_t[i], h_ptrB[i]);
+    }
+}
+
+TYPED_TEST(CSRWrapperTransposeTest, TestTransposeTranspose) {
+    shared_ptr<CSRWrapper<TypeParam> > csr_tt = this->csr_trans_->transpose();
+    TypeParam h_values[8];
+    TypeParam h_values_tt[8];
+    CUDA_CHECK(cudaMemcpy(h_values, this->csr_wrapper_->values(), 8*sizeof(TypeParam),
+        cudaMemcpyDeviceToHost));
+    CUDA_CHECK(cudaMemcpy(h_values_tt, csr_tt->values(), 8*sizeof(TypeParam),
+        cudaMemcpyDeviceToHost));
+    for (int i = 0; i < 8; ++i) {
+        EXPECT_EQ(h_values[i], h_values_tt[i]);
+    }
+}
+
+
+template <typename Dtype>
+class ConvDictWrapperTest : public GPUDeviceTest<Dtype> {
+protected:
+    ConvDictWrapperTest()
+    : handle_(), conv_dict_(NULL), Dl_(NULL), N_(20),
+    boundary_(CSCParameter::CIRCULANT_BACK), lambda2_(0.1) {
+        vector<int> Dl_shape(2);
+        Dl_shape[0] = 7;
+        Dl_shape[1] = 3;
+        Dl_ = new Blob<Dtype>(Dl_shape);
+        FillerParameter filler_param;
+        filler_param.set_min(0.5);
+        filler_param.set_max(1);
+        UniformFiller<Dtype> filler(filler_param);
+        filler.Fill(Dl_);
+        conv_dict_ = new ConvDictWrapper<Dtype>(handle_.get(),
+            Dl_, N_, boundary_, lambda2_);
+    }
+    virtual ~ConvDictWrapperTest() {
+        delete Dl_;
+        delete conv_dict_;
+    }
+
+    CusparseHandle handle_;
+    ConvDictWrapper<Dtype> *conv_dict_;
+    Blob<Dtype> *Dl_;
+    int N_;
+    CSCParameter::Boundary boundary_;
+    Dtype lambda2_;
+};
+
+TYPED_TEST_CASE(ConvDictWrapperTest, TestDtypes);
+
+TYPED_TEST(ConvDictWrapperTest, TestSetUp) {
+}
+
+TYPED_TEST(ConvDictWrapperTest, TestConvDictSize) {
+    EXPECT_EQ(this->conv_dict_->D()->row(), this->N_);
+    EXPECT_EQ(this->conv_dict_->D()->col(), this->N_*this->Dl_->shape(1));
+    if (this->boundary_ == CSCParameter::CIRCULANT_BACK ||
+        this->boundary_ == CSCParameter::CIRCULANT_FRONT) {
+        EXPECT_EQ(this->conv_dict_->D()->nnz(), this->N_*this->Dl_->count());
+    } else {
+        NOT_IMPLEMENTED;
+    }
+}
+
+TYPED_TEST(ConvDictWrapperTest, TestConvDictSanity) {
+    SyncedMemory dense(this->Dl_->shape(1)*this->N_*this->N_*sizeof(TypeParam));
+    this->conv_dict_->D()->to_dense((TypeParam *)dense.mutable_gpu_data());
+    const TypeParam *cpu_ptr = (const TypeParam *)dense.cpu_data();
+    for (int b = 0; b < this->N_; ++b) {
+        for (int r = 0; r < this->Dl_->shape(0); ++r) {
+            for (int c = 0; c < this->Dl_->shape(1); ++c) {
+                int row = (b + r) % this->N_;
+                int col = b * this->Dl_->shape(1) + c;
+                int ind = row * (this->N_*this->Dl_->shape(1)) + col;
+                EXPECT_EQ(cpu_ptr[ind], this->Dl_->cpu_data()[r*this->Dl_->shape(1)+c])
+                    << " Block: " << b
+                    << " r: " << r
+                    << " c: " << c
+                    << " row: " << row
+                    << " col: " << col
+                    << " ind: " << ind;
+            }
+        }
+    }
+}
+
+
+TYPED_TEST(ConvDictWrapperTest, TestLhsMatCreation) {
+    int n = this->Dl_->shape(0);
+    int m = this->Dl_->shape(1);
+    this->conv_dict_->create();
+    EXPECT_EQ(this->conv_dict_->DtDpl2I()->row(), this->N_*m);
+    EXPECT_EQ(this->conv_dict_->DtDpl2I()->col(), this->N_*m);
+    if (this->boundary_ == CSCParameter::CIRCULANT_BACK ||
+        this->boundary_ == CSCParameter::CIRCULANT_FRONT) {
+        EXPECT_EQ(this->conv_dict_->DtDpl2I()->nnz(), this->N_*(2*n-1)*m*m);
+    } else {
+        NOT_IMPLEMENTED;
+    }
+}
+
 } // namespace caffe

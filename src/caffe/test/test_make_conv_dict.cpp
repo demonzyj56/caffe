@@ -107,6 +107,7 @@ TYPED_TEST(MakeConvDictTest, TestResultCoincide) {
     for (int i = 0; i < this->N_+1; ++i) {
         EXPECT_EQ(this->h_ptrB_[i], this->h_ptrB_copy_[i]);
     }
+    EXPECT_EQ(this->h_ptrB_[this->N_], this->n_*this->m_*this->N_);
 }
 
 } // namespace caffe

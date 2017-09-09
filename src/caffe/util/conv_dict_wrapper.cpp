@@ -11,15 +11,27 @@ void make_conv_dict_cpu(const int n, const int m, const Dtype *Dl, const int N,
     CHECK_EQ(boundary, CSCParameter::CIRCULANT_BACK) 
         << "Only circulant back boundary is supported!";
     for (int i = 0; i < N; ++i) {
+        int i_prime = i > (n-1) ? (n-1) : i;
         for (int j = 0; j < n; ++j) {
-            int block = j > i ? j - n : j;
-            int ind = (block + N) % N;
-            int r = (n - j + i) % n;
+            int row = (i_prime - j + n) % n;
             for (int k = 0; k < m; ++k) {
-                *columns = ind * m + k;
-                *values = Dl[r*m + k];
-                columns++;
-                values++;
+                values[i*n*m + j*m + k] = Dl[row*m+k];
+            }
+        }
+    }
+    for (int i = 0; i < n; ++i) {
+        for (int j = 0; j < n; ++j) {
+            int block = (i >= j ? j : j - n + N);
+            for (int k = 0; k < m; ++k) {
+                columns[i*m*n + j*m + k] = block * m + k;
+            }
+        }
+    }
+    for (int i = n; i < N; ++i) {
+        for (int j = 0; j < n; ++j) {
+            int block = j + i - n + 1;
+            for (int k = 0; k < m; ++k) {
+                columns[i*m*n + j*m + k] = block * m + k;
             }
         }
     }
@@ -168,6 +180,25 @@ shared_ptr<CSRWrapper<double> > CSRWrapper<double>::transpose() {
     return Dtrans;
 }
 
+// The length of the dense ptr should be r_*c_, and is row-major.
+// It is on the device side.
+// Note: one tricky thing is that cusparse library represents dense matrix
+// in column major, so we have to transpose the csr matrix to a csc matrix
+// then return the transposed dense matrix as the row view of the origin one.
+template <>
+void CSRWrapper<float>::to_dense(float *d_dense) {
+    shared_ptr<CSRWrapper<float> > trans = transpose();
+    CUSPARSE_CHECK(cusparseScsr2dense(*handle_, col(), row(), trans->descr(),
+        trans->values(), trans->ptrB(), trans->columns(), d_dense, col()));
+}
+
+template <>
+void CSRWrapper<double>::to_dense(double *d_dense) {
+    shared_ptr<CSRWrapper<double> > trans = transpose();
+    CUSPARSE_CHECK(cusparseDcsr2dense(*handle_, col(), row(), trans->descr(),
+        trans->values(), trans->ptrB(), trans->columns(), d_dense, col()));
+}
+
 template <typename Dtype>
 ConvDictWrapper<Dtype>::ConvDictWrapper(cusparseHandle_t *handle, const Blob<Dtype> *Dl, int N,
     CSCParameter::Boundary boundary, Dtype lambda2)
@@ -219,6 +250,9 @@ void ConvDictWrapper<float>::create() {
         info, buffer.mutable_gpu_data()));
     if (NULL != nnzTotalDevHostPtr) {
         nnz = *nnzTotalDevHostPtr;
+        int nnz_local;
+        CUDA_CHECK(cudaMemcpy(&nnz_local, DtDpl2I_->ptrB()+DtDpl2I_->row(), sizeof(int),
+            cudaMemcpyDeviceToHost));
     } else {
         CUDA_CHECK(cudaMemcpy(&nnz, DtDpl2I_->ptrB()+DtDpl2I_->row(), sizeof(int), cudaMemcpyDeviceToHost));
         CUDA_CHECK(cudaMemcpy(&base, DtDpl2I_->ptrB(), sizeof(int), cudaMemcpyDeviceToHost));
@@ -290,118 +324,6 @@ void ConvDictWrapper<double>::create() {
     // step 5: destroy and free memory
     CUSPARSE_CHECK(cusparseDestroyCsrgemm2Info(info));
 }
-/*
-template <>
-void ConvDictWrapper<float>::create() {
-    // need to estimate nnz first
-    int base, nnz;
-    int *nnzTotalDevHostPtr = &nnz;
-    CUSPARSE_CHECK(cusparseSetPointerMode(*handle_, CUSPARSE_POINTER_MODE_HOST));
-    CUSPARSE_CHECK(cusparseXcsrgemmNnz(
-        *handle_,
-        CUSPARSE_OPERATION_TRANSPOSE,
-        CUSPARSE_OPERATION_NON_TRANSPOSE,
-        m_*N_,
-        m_*N_,
-        N_,
-        D_->descr(),
-        D_->nnz(),
-        D_->ptrB(),
-        D_->columns(),
-        D_->descr(),
-        D_->nnz(),
-        D_->ptrB(),
-        D_->columns(),
-        DtDpl2I_->descr(),
-        DtDpl2I_->mutable_ptrB(),
-        nnzTotalDevHostPtr));
-    if (NULL != nnzTotalDevHostPtr) {
-        nnz = *nnzTotalDevHostPtr;
-    } else {
-        CUDA_CHECK(cudaMemcpy(&nnz, DtDpl2I_->mutable_ptrB()+N_*m_, sizeof(int), cudaMemcpyDeviceToHost));
-        CUDA_CHECK(cudaMemcpy(&base, DtDpl2I_->mutable_ptrB(), sizeof(int), cudaMemcpyDeviceToHost));
-        CHECK_EQ(base, 0);
-        nnz -= base;
-    }
-    DtDpl2I_.reset(new CSRWrapper<float>(handle_, N_*m_, N_*m_, nnz));
-    CUSPARSE_CHECK(cusparseScsrgemm(
-        *handle_,
-        CUSPARSE_OPERATION_TRANSPOSE,
-        CUSPARSE_OPERATION_NON_TRANSPOSE,
-        m_*N_,
-        m_*N_,
-        N_,
-        D_->descr(),
-        D_->nnz(),
-        D_->values(),
-        D_->ptrB(),
-        D_->columns(),
-        D_->descr(),
-        D_->nnz(),
-        D_->values(),
-        D_->ptrB(),
-        D_->columns(),
-        DtDpl2I_->descr(),
-        DtDpl2I_->mutable_values(),
-        DtDpl2I_->mutable_ptrB(),
-        DtDpl2I_->mutable_columns()));
-}
-
-template <>
-void ConvDictWrapper<double>::create() {
-    int base, nnz;
-    int *nnzTotalDevHostPtr = &nnz;
-    CUSPARSE_CHECK(cusparseSetPointerMode(*handle_, CUSPARSE_POINTER_MODE_HOST));
-    CUSPARSE_CHECK(cusparseXcsrgemmNnz(
-        *handle_,
-        CUSPARSE_OPERATION_TRANSPOSE,
-        CUSPARSE_OPERATION_NON_TRANSPOSE,
-        m_*N_,
-        m_*N_,
-        N_,
-        D_->descr(),
-        D_->nnz(),
-        D_->ptrB(),
-        D_->columns(),
-        D_->descr(),
-        D_->nnz(),
-        D_->ptrB(),
-        D_->columns(),
-        DtDpl2I_->descr(),
-        DtDpl2I_->mutable_ptrB(),
-        nnzTotalDevHostPtr));
-    if (NULL != nnzTotalDevHostPtr) {
-        nnz = *nnzTotalDevHostPtr;
-    } else {
-        CUDA_CHECK(cudaMemcpy(&nnz, DtDpl2I_->mutable_ptrB()+N_*m_, sizeof(int), cudaMemcpyDeviceToHost));
-        CUDA_CHECK(cudaMemcpy(&base, DtDpl2I_->mutable_ptrB(), sizeof(int), cudaMemcpyDeviceToHost));
-        CHECK_EQ(base, 0);
-        nnz -= base;
-    }
-    DtDpl2I_.reset(new CSRWrapper<double>(handle_, N_*m_, N_*m_, nnz));
-    CUSPARSE_CHECK(cusparseDcsrgemm(
-        *handle_,
-        CUSPARSE_OPERATION_TRANSPOSE,
-        CUSPARSE_OPERATION_NON_TRANSPOSE,
-        m_*N_,
-        m_*N_,
-        N_,
-        D_->descr(),
-        D_->nnz(),
-        D_->values(),
-        D_->ptrB(),
-        D_->columns(),
-        D_->descr(),
-        D_->nnz(),
-        D_->values(),
-        D_->ptrB(),
-        D_->columns(),
-        DtDpl2I_->descr(),
-        DtDpl2I_->mutable_values(),
-        DtDpl2I_->mutable_ptrB(),
-        DtDpl2I_->mutable_columns()));
-}
-*/
 
 template <typename Dtype>
 void ConvDictWrapper<Dtype>::solve(int nnz, const int *d_inds, Dtype *d_x) {

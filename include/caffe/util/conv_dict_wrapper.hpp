@@ -87,6 +87,7 @@ public:
     void set_index_base(cusparseIndexBase_t cusparse_index_base);
     shared_ptr<CSRWrapper<Dtype> > transpose();
     CSRWrapper<Dtype> &identity();
+    void to_dense(Dtype *d_dense);
 
 private:
     cusparseHandle_t *handle_;
@@ -121,7 +122,10 @@ public:
     // The output will overwrite d_x.
     void solve(int nnz, const int *d_inds, Dtype *d_x);
 
-protected:
+    // accessor
+    shared_ptr<CSRWrapper<Dtype> > D() const { return D_; }
+    shared_ptr<CSRWrapper<Dtype> > DtDpl2I() const { return DtDpl2I_; }
+
     // Create the base matrix (DtD+lambda2*I).
     // Use the cusparseScsrgemm2 routine.
     void create();
