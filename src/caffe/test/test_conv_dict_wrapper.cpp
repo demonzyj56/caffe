@@ -171,6 +171,7 @@ TYPED_TEST(CSRWrapperTest, TestSetValues) {
         cudaMemcpyDeviceToHost));
     for (int i = 0; i < 13; ++i) {
         EXPECT_EQ(h_values[i], values[i]);
+        EXPECT_EQ(this->csr_wrapper_->cpu_values()[i], values[i]);
     }
 }
 
@@ -181,6 +182,7 @@ TYPED_TEST(CSRWrapperTest, TestSetColumns) {
     CUDA_CHECK(cudaMemcpy(h_columns, this->csr_wrapper_->columns(), 13*sizeof(int), cudaMemcpyDeviceToHost));
     for (int i = 0; i < 13; ++i) {
         EXPECT_EQ(h_columns[i], columns[i]);
+        EXPECT_EQ(this->csr_wrapper_->cpu_columns()[i], columns[i]);
     }
 }
 
@@ -191,6 +193,7 @@ TYPED_TEST(CSRWrapperTest, TestSetPtrB) {
     CUDA_CHECK(cudaMemcpy(h_ptrB, this->csr_wrapper_->ptrB(), 6*sizeof(int), cudaMemcpyDeviceToHost));
     for (int i = 0; i < 6; ++i) {
         EXPECT_EQ(h_ptrB[i], ptrB[i]);
+        EXPECT_EQ(this->csr_wrapper_->cpu_ptrB()[i], ptrB[i]);
     }
 }
 
@@ -305,6 +308,28 @@ TYPED_TEST(CSRWrapperTest, TestToDense) {
             int column = columns[c];
             EXPECT_EQ(values[c], cpu_ptr[r*this->c_+column]);
         }
+    }
+}
+
+TYPED_TEST(CSRWrapperTest, TestClip) {
+    const TypeParam values[] = {1., -1., -3., -2., 5., 4., 6., 4., -4., 2., 7., 8., -5.};
+    const int columns[] = {0, 1, 3, 0, 1, 2, 3, 4, 0, 2, 3, 1, 4};
+    const int ptrB[] = {0, 3, 5, 8, 11, 13};
+    const TypeParam values_clipped[] = {1., -1., -2., 5., 8., -5.};
+    const int columns_clipped[] = {0, 1, 0, 1, 1, 2};
+    const int ptrB_clipped[] = {0, 2, 4, 6};
+    const int inds[] = {0, 1, 4};
+    this->csr_wrapper_->set_values(values);
+    this->csr_wrapper_->set_columns(columns);
+    this->csr_wrapper_->set_ptrB(ptrB);
+    shared_ptr<CSRWrapper<TypeParam> > clipped = this->csr_wrapper_->clip(3, inds);
+    ASSERT_EQ(clipped->nnz(), 6);  // should die if wrong before proceed
+    for (int i = 0; i < 6; ++i) {
+        EXPECT_EQ(clipped->cpu_values()[i], values_clipped[i]);
+        EXPECT_EQ(clipped->cpu_columns()[i], columns_clipped[i]);
+    }
+    for (int i = 0; i < 4; ++i) {
+        EXPECT_EQ(clipped->cpu_ptrB()[i], ptrB_clipped[i]);
     }
 }
 
@@ -464,6 +489,24 @@ TYPED_TEST(ConvDictWrapperTest, TestLhsMatCreation) {
     } else {
         NOT_IMPLEMENTED;
     }
+}
+
+TYPED_TEST(ConvDictWrapperTest, TestSolve) {
+    int nnz = 10;
+    vector<TypeParam> inds_float(10);
+    vector<int> inds(10);
+    SyncedMemory rhs(sizeof(TypeParam)*nnz);
+    TypeParam *rhs_ptr = (TypeParam *)rhs.mutable_gpu_data();
+    caffe_rng_uniform(nnz, TypeParam(0), TypeParam(this->conv_dict_->DtDpl2I()->row()),
+        inds_float.data());
+    caffe_gpu_rng_gaussian(nnz, TypeParam(0), TypeParam(1), rhs_ptr);
+    for (int i = 0; i < nnz; ++i) {
+        // ensure the behavior of rng_uniform is [a, b)
+        inds[i] = static_cast<int>(inds_float[i]);
+        ASSERT_LT(inds[i], this->conv_dict_->DtDpl2I()->row());
+    }
+    this->conv_dict_->create();
+    this->conv_dict_->solve(nnz, inds.data(), rhs_ptr);
 }
 
 } // namespace caffe

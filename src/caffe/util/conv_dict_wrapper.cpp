@@ -1,6 +1,6 @@
 #include "caffe/util/conv_dict_wrapper.hpp"
-#include "caffe/syncedmem.hpp"
 #include "caffe/util/math_functions.hpp"
+#include <algorithm>
 
 namespace caffe {
 
@@ -48,7 +48,7 @@ template void make_conv_dict_cpu<double>(const int n, const int m, const double 
 template <typename Dtype>
 CSRWrapper<Dtype>::CSRWrapper(cusparseHandle_t *handle, int r, int c, int nnz)
     : handle_(handle), descr_(NULL), r_(r), c_(c), nnz_(nnz),
-    d_values_(NULL), d_columns_(NULL), d_ptrB_(NULL) {
+    d_values_(), d_columns_(), d_ptrB_() {
     CUSPARSE_CHECK(cusparseCreateMatDescr(&descr_));
     CUSPARSE_CHECK(cusparseSetMatType(descr_, CUSPARSE_MATRIX_TYPE_GENERAL));
     CUSPARSE_CHECK(cusparseSetMatIndexBase(descr_, CUSPARSE_INDEX_BASE_ZERO));  // zero based
@@ -57,54 +57,70 @@ CSRWrapper<Dtype>::CSRWrapper(cusparseHandle_t *handle, int r, int c, int nnz)
 template <typename Dtype>
 CSRWrapper<Dtype>::~CSRWrapper() {
     CUSPARSE_CHECK(cusparseDestroyMatDescr(descr_));
-    if (NULL != d_values_) {
-        CUDA_CHECK(cudaFree(d_values_));
-    }
-    if (NULL != d_columns_) {
-        CUDA_CHECK(cudaFree(d_columns_));
-    }
-    if (NULL != d_ptrB_) {
-        CUDA_CHECK(cudaFree(d_ptrB_));
-    }
 }
 
 template <typename Dtype>
 Dtype *CSRWrapper<Dtype>::mutable_values() {
     CHECK(nnz_ >= 0);
     if (NULL == d_values_) {
-        CUDA_CHECK(cudaMalloc((void**)&d_values_, sizeof(Dtype)*nnz_));
+        d_values_ = shared_ptr<SyncedMemory>(new SyncedMemory(sizeof(Dtype)*nnz_));
     }
-    return d_values_;
+    return (Dtype *)d_values_->mutable_gpu_data();
 }
 
 template <typename Dtype>
 int *CSRWrapper<Dtype>::mutable_columns() {
     CHECK(nnz_ >= 0);
     if (NULL == d_columns_) {
-        CUDA_CHECK(cudaMalloc((void**)&d_columns_, sizeof(int)*nnz_));
+        d_columns_ = shared_ptr<SyncedMemory>(new SyncedMemory(sizeof(int)*nnz_));
     }
-    return d_columns_;
+    return (int *)d_columns_->mutable_gpu_data();
 }
 
 template <typename Dtype>
 int *CSRWrapper<Dtype>::mutable_ptrB() {
     CHECK(r_ > 0);
     if (NULL == d_ptrB_) {
-        CUDA_CHECK(cudaMalloc((void**)&d_ptrB_, sizeof(int)*(r_+1)));
+        d_ptrB_ = shared_ptr<SyncedMemory>(new SyncedMemory(sizeof(int)*(r_+1)));
     }
-    return d_ptrB_;
+    return (int *)d_ptrB_->mutable_gpu_data();
+}
+
+template <typename Dtype>
+Dtype *CSRWrapper<Dtype>::mutable_cpu_values() {
+    CHECK(nnz_ >= 0);
+    if (NULL == d_values_) {
+        d_values_ = shared_ptr<SyncedMemory>(new SyncedMemory(sizeof(Dtype)*nnz_));
+    }
+    return (Dtype *)d_values_->mutable_cpu_data();
+}
+
+template <typename Dtype>
+int *CSRWrapper<Dtype>::mutable_cpu_columns() {
+    CHECK(nnz_ >= 0);
+    if (NULL == d_columns_) {
+        d_columns_ = shared_ptr<SyncedMemory>(new SyncedMemory(sizeof(int)*nnz_));
+    }
+    return (int *)d_columns_->mutable_cpu_data();
+}
+
+template <typename Dtype>
+int *CSRWrapper<Dtype>::mutable_cpu_ptrB() {
+    CHECK(r_ > 0);
+    if (NULL == d_ptrB_) {
+        d_ptrB_ = shared_ptr<SyncedMemory>(new SyncedMemory(sizeof(int)*(r_+1)));
+    }
+    return (int *)d_ptrB_->mutable_cpu_data();
 }
 
 template <typename Dtype>
 void CSRWrapper<Dtype>::set_nnz(int nnz) {
     if (nnz_ != nnz) {
         if (NULL != d_values_) {
-            CUDA_CHECK(cudaFree(d_values_));
-            d_values_ = NULL;
+            d_values_.reset();
         }
         if (NULL != d_columns_) {
-            CUDA_CHECK(cudaFree(d_columns_));
-            d_columns_ = NULL;
+            d_columns_.reset();
         }
     }
     nnz_ = nnz;
@@ -199,10 +215,50 @@ void CSRWrapper<double>::to_dense(double *d_dense) {
         trans->values(), trans->ptrB(), trans->columns(), d_dense, col()));
 }
 
+//! naive impl
+template <typename Dtype>
+shared_ptr<CSRWrapper<Dtype> > CSRWrapper<Dtype>::clip(int nnz, const int *inds) {
+    shared_ptr<CSRWrapper<Dtype> > clipped(new CSRWrapper<Dtype>(handle_, nnz, nnz, -1));
+    clipped->mutable_cpu_ptrB()[0] = 0;
+    for (int i = 0; i < nnz; ++i) {
+        int ind = inds[i];
+        clipped->mutable_cpu_ptrB()[i+1] = clipped->mutable_cpu_ptrB()[i];
+        for (int j = cpu_ptrB()[ind]; j < cpu_ptrE()[ind]; ++j) {
+            int target = cpu_columns()[j];
+            for (int k = 0; k < nnz; ++k) {
+                if (inds[k] == target) {
+                    clipped->mutable_cpu_ptrB()[i+1] += 1;
+                    break;
+                }
+            }
+        }
+    }
+    clipped->set_nnz(clipped->cpu_ptrB()[nnz]);
+    Dtype *clipped_cpu_values = clipped->mutable_cpu_values();
+    int *clipped_cpu_columns = clipped->mutable_cpu_columns();
+    for (int i = 0; i < nnz; ++i) {
+        int ind = inds[i];
+        for (int j = cpu_ptrB()[ind]; j < cpu_ptrE()[ind]; ++j) {
+            Dtype target_value = cpu_values()[j];
+            int target_column = cpu_columns()[j];
+            for (int k = 0; k < nnz; ++k) {
+                if (inds[k] == target_column) {
+                    *clipped_cpu_values = target_value;
+                    *clipped_cpu_columns = k;
+                    clipped_cpu_values++;
+                    clipped_cpu_columns++;
+                    break;
+                }
+            }
+        }
+    }
+    return clipped;
+}
+
 template <typename Dtype>
 ConvDictWrapper<Dtype>::ConvDictWrapper(cusparseHandle_t *handle, const Blob<Dtype> *Dl, int N,
     CSCParameter::Boundary boundary, Dtype lambda2)
-    : handle_(handle), n_(Dl->shape(0)), m_(Dl->shape(1)), N_(N),
+    : handle_(handle), solver_handle_(NULL), n_(Dl->shape(0)), m_(Dl->shape(1)), N_(N),
     boundary_(boundary), lambda2_(lambda2),
     D_(new CSRWrapper<Dtype>(handle, N_, N_*m_, n_*m_*N_)),
     DtDpl2I_(new CSRWrapper<Dtype>(handle, N_*m_, N_*m_, -1)) {
@@ -210,10 +266,12 @@ ConvDictWrapper<Dtype>::ConvDictWrapper(cusparseHandle_t *handle, const Blob<Dty
         << "Only circulant back boundary condtion is currently supported!";
     make_conv_dict_gpu(n_, m_, Dl->gpu_data(), N_, boundary_,
         D_->mutable_values(), D_->mutable_columns(), D_->mutable_ptrB());
+    CUSOLVER_CHECK(cusolverSpCreate(&solver_handle_));
 }
 
 template <typename Dtype>
 ConvDictWrapper<Dtype>::~ConvDictWrapper() {
+    CUSOLVER_CHECK(cusolverSpDestroy(solver_handle_));
 }
 
 template <>
@@ -325,9 +383,40 @@ void ConvDictWrapper<double>::create() {
     CUSPARSE_CHECK(cusparseDestroyCsrgemm2Info(info));
 }
 
+template <>
+void ConvDictWrapper<float>::solve(int nnz, const int *h_inds, float *d_x) {
+    CHECK_GE(DtDpl2I_->nnz(), 0); // should be initialized by create()
+    shared_ptr<CSRWrapper<float> > clipped = DtDpl2I_->clip(nnz, h_inds);
+    float tol = 1e-6;
+    int reorder = 0;
+    int singularity = 0;
+    CUSOLVER_CHECK(cusolverSpScsrlsvchol(solver_handle_, clipped->row(), clipped->nnz(),
+        clipped->descr(), clipped->values(), clipped->ptrB(), clipped->columns(),
+        d_x, tol, reorder, d_x, &singularity));
+    CHECK_EQ(singularity, -1) << "Singularity value is " << singularity;
+}
+
+template <>
+void ConvDictWrapper<double>::solve(int nnz, const int *h_inds, double *d_x) {
+    CHECK_GE(DtDpl2I_->nnz(), 0); // should be initialized by create()
+    shared_ptr<CSRWrapper<double> > clipped = DtDpl2I_->clip(nnz, h_inds);
+    double tol = 1e-9;
+    int reorder = 0;
+    int singularity = 0;
+    CUSOLVER_CHECK(cusolverSpDcsrlsvchol(solver_handle_, clipped->row(), clipped->nnz(),
+        clipped->descr(), clipped->values(), clipped->ptrB(), clipped->columns(),
+        d_x, tol, reorder, d_x, &singularity));
+    CHECK_EQ(singularity, -1) << "Singularity value is " << singularity;
+}
+
 template <typename Dtype>
-void ConvDictWrapper<Dtype>::solve(int nnz, const int *d_inds, Dtype *d_x) {
-    NOT_IMPLEMENTED;
+void ConvDictWrapper<Dtype>::analyse(int nnz, const int *h_inds, const Dtype *d_x) {
+    shared_ptr<CSRWrapper<Dtype> > clipped = DtDpl2I_->clip(nnz, h_inds);
+    int issym = 0;
+    CUSOLVER_CHECK(cusolverSpXcsrissymHost(solver_handle_, clipped->row(), clipped->nnz(),
+        clipped->descr(), clipped->cpu_ptrB(), clipped->cpu_ptrE(), clipped->cpu_columns(), &issym));
+    LOG_IF(INFO, issym == 1) << "The clipped matrix is symmetric.";
+    LOG_IF(WARNING, issym == 0) << "The clipped matrix is NOT symmetric.";
 }
 
 INSTANTIATE_CLASS(CSRWrapper);

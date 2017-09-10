@@ -75,4 +75,5 @@ template void make_conv_dict_gpu<float>(const int n, const int m, const float *d
 template void make_conv_dict_gpu<double>(const int n, const int m, const double *d_Dl, const int N,
     CSCParameter::Boundary boundary, double *d_values, int *d_columns, int *d_ptrB);
 
+
 } // namespace caffe

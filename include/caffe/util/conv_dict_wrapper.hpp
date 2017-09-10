@@ -2,11 +2,12 @@
 #define CAFFE_CONV_DICT_WRAPPER_HPP_
 
 #include "caffe/common.hpp"
+#include "caffe/syncedmem.hpp"
 #include "caffe/blob.hpp"
 #include "caffe/proto/caffe.pb.h"
 #include "cusparse.h"
 // #include "cusolverDn.h"
-// #include "cusolverSp.h"
+#include "cusolverSp.h"
 
 namespace caffe {
 
@@ -21,6 +22,12 @@ void make_conv_dict_gpu(const int n, const int m, const Dtype *Dl, const int N,
     cusparseStatus_t status = condition; \
     CHECK_EQ(status, CUSPARSE_STATUS_SUCCESS) \
         << "cusparse fail!"; \
+} while(0)
+
+#define CUSOLVER_CHECK(condition) do{ \
+    cusolverStatus_t status = condition; \
+    CHECK_EQ(status, CUSOLVER_STATUS_SUCCESS) \
+        << "cusolver fail!"; \
 } while(0)
 
 /*
@@ -76,6 +83,14 @@ public:
     int   *mutable_columns();
     int   *mutable_ptrB();
     int   *mutable_ptrE() { return mutable_ptrB() + 1; }
+    const Dtype *cpu_values()  { return mutable_cpu_values(); }
+    const int   *cpu_columns() { return mutable_cpu_columns(); }
+    const int   *cpu_ptrB()    { return mutable_cpu_ptrB(); }
+    const int   *cpu_ptrE()    { return mutable_cpu_ptrE(); }
+    Dtype *mutable_cpu_values(); 
+    int   *mutable_cpu_columns();
+    int   *mutable_cpu_ptrB();
+    int   *mutable_cpu_ptrE() { return mutable_cpu_ptrB() + 1; }
     void set_nnz(int nnz);
     void set_values(const Dtype *values);
     void set_columns(const int *columns);
@@ -88,6 +103,8 @@ public:
     shared_ptr<CSRWrapper<Dtype> > transpose();
     CSRWrapper<Dtype> &identity();
     void to_dense(Dtype *d_dense);
+    // Remove and keep only indices appeared in inds.
+    shared_ptr<CSRWrapper<Dtype> > clip(int nnz, const int *inds);
 
 private:
     cusparseHandle_t *handle_;
@@ -95,9 +112,9 @@ private:
     int r_;
     int c_;
     int nnz_;
-    Dtype *d_values_;
-    int *d_columns_;
-    int *d_ptrB_;
+    shared_ptr<SyncedMemory> d_values_;
+    shared_ptr<SyncedMemory> d_columns_;
+    shared_ptr<SyncedMemory> d_ptrB_;
 
     DISABLE_COPY_AND_ASSIGN(CSRWrapper);
 };
@@ -118,9 +135,16 @@ public:
     ~ConvDictWrapper();
 
     // solve (D^tD + lambda2*I)beta = x.
-    // Input should be on device side.
+    // The index should be on host side while the output is on device side.
     // The output will overwrite d_x.
-    void solve(int nnz, const int *d_inds, Dtype *d_x);
+    void solve(int nnz, const int *h_inds, Dtype *d_x);
+
+    // Analyse the pattern given by h_inds.
+    // Check whether the matrix created using h_inds is positive definite.
+    // This is equivalent to checking whether the matrix given by clip
+    // is symmetric, and whether all the eigenvalues are larger than zero.
+    // If d_x is not a NULL pointer, then computes the residual as well.
+    void analyse(int nnz, const int *h_inds, const Dtype *d_x);
 
     // accessor
     shared_ptr<CSRWrapper<Dtype> > D() const { return D_; }
@@ -130,9 +154,9 @@ public:
     // Use the cusparseScsrgemm2 routine.
     void create();
 
-
 private:
     cusparseHandle_t *handle_;
+    cusolverSpHandle_t solver_handle_;
     int n_;
     int m_;
     int N_;
