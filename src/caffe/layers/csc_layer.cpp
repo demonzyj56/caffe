@@ -504,6 +504,11 @@ void CSCLayer<Dtype>::caffe_cpu_soft_thresholding_(const int n, Dtype thresh, Dt
 	}
 }
 
+template <typename Dtype>
+void CSCLayer<Dtype>::csc_inverse_(const int n, const Dtype *data, Dtype *diff) {
+    NOT_IMPLEMENTED;
+}
+
 
 #ifdef CPU_ONLY
 STUB_GPU(CSCLayer);

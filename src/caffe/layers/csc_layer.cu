@@ -293,10 +293,10 @@ void CSCLayer<Dtype>::Backward_gpu(const vector<Blob<Dtype>*>& top,
   // ------------------------------------------------------------------------
   // use beta as buffer for top diff in patch view
   this->permute_num_channels_gpu_(top[0], &beta, true);
-  Dtype *beta_data = beta.mutable_gpu_data();
+  const Dtype *beta_data = beta.mutable_gpu_data();
   Dtype *beta_diff = beta.mutable_gpu_diff();
   // solve beta
-  this->csc_inverse_gpu_(beta.count(), beta_diff, beta_data);
+  this->csc_inverse_(beta.count(), beta_data, beta_diff);
   // ------------------------------------------------------------------------
   if (this->param_propagate_down_[0]) {
   // ------------------------------------------------------------------------
@@ -420,13 +420,13 @@ void CSCLayer<Dtype>::set_lambda1_gpu_diff_(Dtype l) {
     sizeof(Dtype), cudaMemcpyHostToDevice));
 }
 
-template <typename Dtype>
-void CSCLayer<Dtype>::csc_inverse_gpu_(const int n, Dtype *diff, const Dtype *data) {
-  set_if_kernel<Dtype><<<CAFFE_GET_BLOCKS(n), CAFFE_CUDA_NUM_THREADS>>>(
-    n, data, diff);
-  CUDA_POST_KERNEL_CHECK;
-  caffe_gpu_scal(n, Dtype(1./admm_max_rho_), diff);
-}
+/* template <typename Dtype> */
+/* void CSCLayer<Dtype>::csc_inverse_gpu_(const int n, Dtype *diff, const Dtype *data) { */
+/*   set_if_kernel<Dtype><<<CAFFE_GET_BLOCKS(n), CAFFE_CUDA_NUM_THREADS>>>( */
+/*     n, data, diff); */
+/*   CUDA_POST_KERNEL_CHECK; */
+/*   caffe_gpu_scal(n, Dtype(1./admm_max_rho_), diff); */
+/* } */
 
 INSTANTIATE_LAYER_GPU_FUNCS(CSCLayer);
 

@@ -56,8 +56,7 @@ class CSCLayer : public Layer<Dtype> {
   void caffe_gpu_soft_thresholding_(const int n, Dtype thresh, Dtype *x);
   void caffe_cpu_soft_thresholding_(const int n, Dtype thresh, Dtype *x);
 
-  void csc_inverse_cpu_(const int n, Dtype *diff, const Dtype* data) {}
-  void csc_inverse_gpu_(const int n, Dtype *diff, const Dtype* data);
+  void csc_inverse_(const int n, const Dtype* data, Dtype *diff);
 
 
   void im2patches_gpu_(const Blob<Dtype> *blob, Blob<Dtype> *patches, bool compute_diff);
