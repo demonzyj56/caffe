@@ -1,6 +1,5 @@
 #include "caffe/util/conv_dict_wrapper.hpp"
 #include "caffe/util/math_functions.hpp"
-#include <algorithm>
 
 namespace caffe {
 
@@ -215,18 +214,23 @@ void CSRWrapper<double>::to_dense(double *d_dense) {
         trans->values(), trans->ptrB(), trans->columns(), d_dense, col()));
 }
 
-//! naive impl
+// TODO(leoyolo): improve this naive impl.
+// Before clipping, check whether h_inds have duplicate entries.
+// If so then die.
 template <typename Dtype>
-shared_ptr<CSRWrapper<Dtype> > CSRWrapper<Dtype>::clip(int nnz, const int *inds) {
+shared_ptr<CSRWrapper<Dtype> > CSRWrapper<Dtype>::clip(int nnz, const int *h_inds) {
+    for (int i = 0; i < nnz-1; ++i) {
+        CHECK_LT(h_inds[i], h_inds[i+1]) << "The index set should be strictly increasing.";
+    }
     shared_ptr<CSRWrapper<Dtype> > clipped(new CSRWrapper<Dtype>(handle_, nnz, nnz, -1));
     clipped->mutable_cpu_ptrB()[0] = 0;
     for (int i = 0; i < nnz; ++i) {
-        int ind = inds[i];
+        int ind = h_inds[i];
         clipped->mutable_cpu_ptrB()[i+1] = clipped->mutable_cpu_ptrB()[i];
         for (int j = cpu_ptrB()[ind]; j < cpu_ptrE()[ind]; ++j) {
             int target = cpu_columns()[j];
             for (int k = 0; k < nnz; ++k) {
-                if (inds[k] == target) {
+                if (h_inds[k] == target) {
                     clipped->mutable_cpu_ptrB()[i+1] += 1;
                     break;
                 }
@@ -237,12 +241,12 @@ shared_ptr<CSRWrapper<Dtype> > CSRWrapper<Dtype>::clip(int nnz, const int *inds)
     Dtype *clipped_cpu_values = clipped->mutable_cpu_values();
     int *clipped_cpu_columns = clipped->mutable_cpu_columns();
     for (int i = 0; i < nnz; ++i) {
-        int ind = inds[i];
+        int ind = h_inds[i];
         for (int j = cpu_ptrB()[ind]; j < cpu_ptrE()[ind]; ++j) {
             Dtype target_value = cpu_values()[j];
             int target_column = cpu_columns()[j];
             for (int k = 0; k < nnz; ++k) {
-                if (inds[k] == target_column) {
+                if (h_inds[k] == target_column) {
                     *clipped_cpu_values = target_value;
                     *clipped_cpu_columns = k;
                     clipped_cpu_values++;
@@ -255,23 +259,41 @@ shared_ptr<CSRWrapper<Dtype> > CSRWrapper<Dtype>::clip(int nnz, const int *inds)
     return clipped;
 }
 
+// should create a cusolver handle
+template <typename Dtype>
+bool CSRWrapper<Dtype>::symmetric() {
+    if (r_ != c_) {
+        LOG(WARNING) << "Not a square matrix.";
+        return false;
+    }
+    cusolverSpHandle_t handle = NULL;
+    int issym = 0;
+    CUSOLVER_CHECK(cusolverSpCreate(&handle));
+    CUSOLVER_CHECK(cusolverSpXcsrissymHost(handle, r_, nnz_, descr_,
+        cpu_ptrB(), cpu_ptrE(), cpu_columns(), &issym));
+    CUSOLVER_CHECK(cusolverSpDestroy(handle));
+    return static_cast<bool>(issym);
+}
+
 template <typename Dtype>
 ConvDictWrapper<Dtype>::ConvDictWrapper(cusparseHandle_t *handle, const Blob<Dtype> *Dl, int N,
     CSCParameter::Boundary boundary, Dtype lambda2)
-    : handle_(handle), solver_handle_(NULL), n_(Dl->shape(0)), m_(Dl->shape(1)), N_(N),
-    boundary_(boundary), lambda2_(lambda2),
+    : handle_(handle), dnsolver_handle_(NULL), spsolver_handle_(NULL), n_(Dl->shape(0)),
+    m_(Dl->shape(1)), N_(N), boundary_(boundary), lambda2_(lambda2),
     D_(new CSRWrapper<Dtype>(handle, N_, N_*m_, n_*m_*N_)),
     DtDpl2I_(new CSRWrapper<Dtype>(handle, N_*m_, N_*m_, -1)) {
     CHECK_EQ(boundary_, CSCParameter::CIRCULANT_BACK)
         << "Only circulant back boundary condtion is currently supported!";
     make_conv_dict_gpu(n_, m_, Dl->gpu_data(), N_, boundary_,
         D_->mutable_values(), D_->mutable_columns(), D_->mutable_ptrB());
-    CUSOLVER_CHECK(cusolverSpCreate(&solver_handle_));
+    CUSOLVER_CHECK(cusolverSpCreate(&spsolver_handle_));
+    CUSOLVER_CHECK(cusolverDnCreate(&dnsolver_handle_));
 }
 
 template <typename Dtype>
 ConvDictWrapper<Dtype>::~ConvDictWrapper() {
-    CUSOLVER_CHECK(cusolverSpDestroy(solver_handle_));
+    CUSOLVER_CHECK(cusolverSpDestroy(spsolver_handle_));
+    CUSOLVER_CHECK(cusolverDnDestroy(dnsolver_handle_));
 }
 
 template <>
@@ -387,10 +409,10 @@ template <>
 void ConvDictWrapper<float>::solve(int nnz, const int *h_inds, float *d_x) {
     CHECK_GE(DtDpl2I_->nnz(), 0); // should be initialized by create()
     shared_ptr<CSRWrapper<float> > clipped = DtDpl2I_->clip(nnz, h_inds);
-    float tol = 1e-6;
+    float tol = 1e-12;
     int reorder = 0;
     int singularity = 0;
-    CUSOLVER_CHECK(cusolverSpScsrlsvchol(solver_handle_, clipped->row(), clipped->nnz(),
+    CUSOLVER_CHECK(cusolverSpScsrlsvchol(spsolver_handle_, clipped->row(), clipped->nnz(),
         clipped->descr(), clipped->values(), clipped->ptrB(), clipped->columns(),
         d_x, tol, reorder, d_x, &singularity));
     CHECK_EQ(singularity, -1) << "Singularity value is " << singularity;
@@ -400,23 +422,66 @@ template <>
 void ConvDictWrapper<double>::solve(int nnz, const int *h_inds, double *d_x) {
     CHECK_GE(DtDpl2I_->nnz(), 0); // should be initialized by create()
     shared_ptr<CSRWrapper<double> > clipped = DtDpl2I_->clip(nnz, h_inds);
-    double tol = 1e-9;
+    double tol = 1e-12;
     int reorder = 0;
     int singularity = 0;
-    CUSOLVER_CHECK(cusolverSpDcsrlsvchol(solver_handle_, clipped->row(), clipped->nnz(),
+    CUSOLVER_CHECK(cusolverSpDcsrlsvchol(spsolver_handle_, clipped->row(), clipped->nnz(),
         clipped->descr(), clipped->values(), clipped->ptrB(), clipped->columns(),
         d_x, tol, reorder, d_x, &singularity));
     CHECK_EQ(singularity, -1) << "Singularity value is " << singularity;
 }
 
-template <typename Dtype>
-void ConvDictWrapper<Dtype>::analyse(int nnz, const int *h_inds, const Dtype *d_x) {
-    shared_ptr<CSRWrapper<Dtype> > clipped = DtDpl2I_->clip(nnz, h_inds);
-    int issym = 0;
-    CUSOLVER_CHECK(cusolverSpXcsrissymHost(solver_handle_, clipped->row(), clipped->nnz(),
-        clipped->descr(), clipped->cpu_ptrB(), clipped->cpu_ptrE(), clipped->cpu_columns(), &issym));
-    LOG_IF(INFO, issym == 1) << "The clipped matrix is symmetric.";
-    LOG_IF(WARNING, issym == 0) << "The clipped matrix is NOT symmetric.";
+template <>
+void ConvDictWrapper<float>::analyse(int nnz, const int *h_inds) {
+    shared_ptr<CSRWrapper<float> > clipped = DtDpl2I_->clip(nnz, h_inds);
+    CHECK(clipped->symmetric()) << "The clipped matrix is NOT symmetric.";
+    SyncedMemory clipped_dense(clipped->row()*clipped->col()*sizeof(float));
+    float *clipped_dense_gpu = (float *)clipped_dense.mutable_gpu_data();
+    clipped->to_dense(clipped_dense_gpu);
+    cusolverEigMode_t jobz = CUSOLVER_EIG_MODE_NOVECTOR; // only eigenvalues are needed
+    cublasFillMode_t uplo = CUBLAS_FILL_MODE_UPPER;
+    SyncedMemory eigs(clipped->row()*sizeof(float));
+    SyncedMemory devInfo(sizeof(int));
+    int lwork = 0;
+    // use dense routine to check positive-definitiveness
+    CUSOLVER_CHECK(cusolverDnSsyevd_bufferSize(dnsolver_handle_, jobz, uplo, clipped->row(),
+        clipped_dense_gpu, clipped->row(), (const float *)eigs.gpu_data(), &lwork));
+    SyncedMemory work(lwork*sizeof(float));
+    CUSOLVER_CHECK(cusolverDnSsyevd(dnsolver_handle_, jobz, uplo, clipped->row(),
+        clipped_dense_gpu, clipped->row(), (float *)eigs.mutable_gpu_data(),
+        (float *)work.mutable_gpu_data(), lwork, (int *)devInfo.mutable_gpu_data()));
+    CHECK_EQ(*(const int *)devInfo.cpu_data(), 0);
+    for (int i = 0; i < clipped->row(); ++i) {
+        float eig = ((const float *)eigs.cpu_data())[i];
+        CHECK_GE(eig, lambda2_);
+        LOG(INFO) << "The " << i+1 << "th eigenvalue is " << eig;
+    }
+}
+template <>
+void ConvDictWrapper<double>::analyse(int nnz, const int *h_inds) {
+    shared_ptr<CSRWrapper<double> > clipped = DtDpl2I_->clip(nnz, h_inds);
+    CHECK(clipped->symmetric()) << "The clipped matrix is NOT symmetric.";
+    SyncedMemory clipped_dense(clipped->row()*clipped->col()*sizeof(double));
+    double *clipped_dense_gpu = (double *)clipped_dense.mutable_gpu_data();
+    clipped->to_dense(clipped_dense_gpu);
+    cusolverEigMode_t jobz = CUSOLVER_EIG_MODE_NOVECTOR; // only eigenvalues are needed
+    cublasFillMode_t uplo = CUBLAS_FILL_MODE_UPPER;
+    SyncedMemory eigs(clipped->row()*sizeof(double));
+    SyncedMemory devInfo(sizeof(int));
+    int lwork = 0;
+    // use dense routine to check positive-definitiveness
+    CUSOLVER_CHECK(cusolverDnDsyevd_bufferSize(dnsolver_handle_, jobz, uplo, clipped->row(),
+        clipped_dense_gpu, clipped->row(), (const double *)eigs.gpu_data(), &lwork));
+    SyncedMemory work(lwork*sizeof(double));
+    CUSOLVER_CHECK(cusolverDnDsyevd(dnsolver_handle_, jobz, uplo, clipped->row(),
+        clipped_dense_gpu, clipped->row(), (double *)eigs.mutable_gpu_data(),
+        (double *)work.mutable_gpu_data(), lwork, (int *)devInfo.mutable_gpu_data()));
+    CHECK_EQ(*(const int *)devInfo.cpu_data(), 0);
+    for (int i = 0; i < clipped->row(); ++i) {
+        double eig = ((const double *)eigs.cpu_data())[i];
+        CHECK_GE(eig, lambda2_);
+        LOG(INFO) << "The " << i+1 << "th eigenvalue is " << eig;
+    }
 }
 
 INSTANTIATE_CLASS(CSRWrapper);

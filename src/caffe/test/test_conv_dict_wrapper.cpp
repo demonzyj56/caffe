@@ -1,4 +1,5 @@
 #include <vector>
+#include <algorithm>
 
 #include "gtest/gtest.h"
 
@@ -483,6 +484,7 @@ TYPED_TEST(ConvDictWrapperTest, TestLhsMatCreation) {
     this->conv_dict_->create();
     EXPECT_EQ(this->conv_dict_->DtDpl2I()->row(), this->N_*m);
     EXPECT_EQ(this->conv_dict_->DtDpl2I()->col(), this->N_*m);
+    EXPECT_TRUE(this->conv_dict_->DtDpl2I()->symmetric());
     if (this->boundary_ == CSCParameter::CIRCULANT_BACK ||
         this->boundary_ == CSCParameter::CIRCULANT_FRONT) {
         EXPECT_EQ(this->conv_dict_->DtDpl2I()->nnz(), this->N_*(2*n-1)*m*m);
@@ -493,20 +495,18 @@ TYPED_TEST(ConvDictWrapperTest, TestLhsMatCreation) {
 
 TYPED_TEST(ConvDictWrapperTest, TestSolve) {
     int nnz = 10;
-    vector<TypeParam> inds_float(10);
-    vector<int> inds(10);
+    vector<int> inds(this->conv_dict_->DtDpl2I()->row());
+    for (int i = 0; i < inds.size(); ++i) {
+        inds[i] = i;
+    }
+    std::random_shuffle(inds.begin(), inds.end());
+    std::sort(inds.begin(), inds.begin() + nnz);
     SyncedMemory rhs(sizeof(TypeParam)*nnz);
     TypeParam *rhs_ptr = (TypeParam *)rhs.mutable_gpu_data();
-    caffe_rng_uniform(nnz, TypeParam(0), TypeParam(this->conv_dict_->DtDpl2I()->row()),
-        inds_float.data());
     caffe_gpu_rng_gaussian(nnz, TypeParam(0), TypeParam(1), rhs_ptr);
-    for (int i = 0; i < nnz; ++i) {
-        // ensure the behavior of rng_uniform is [a, b)
-        inds[i] = static_cast<int>(inds_float[i]);
-        ASSERT_LT(inds[i], this->conv_dict_->DtDpl2I()->row());
-    }
     this->conv_dict_->create();
     this->conv_dict_->solve(nnz, inds.data(), rhs_ptr);
+    this->conv_dict_->analyse(nnz, inds.data());
 }
 
 } // namespace caffe

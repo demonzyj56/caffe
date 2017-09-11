@@ -6,7 +6,7 @@
 #include "caffe/blob.hpp"
 #include "caffe/proto/caffe.pb.h"
 #include "cusparse.h"
-// #include "cusolverDn.h"
+#include "cusolverDn.h"  // for computing eigenvalues
 #include "cusolverSp.h"
 
 namespace caffe {
@@ -104,7 +104,8 @@ public:
     CSRWrapper<Dtype> &identity();
     void to_dense(Dtype *d_dense);
     // Remove and keep only indices appeared in inds.
-    shared_ptr<CSRWrapper<Dtype> > clip(int nnz, const int *inds);
+    shared_ptr<CSRWrapper<Dtype> > clip(int nnz, const int *h_inds);
+    bool symmetric();
 
 private:
     cusparseHandle_t *handle_;
@@ -143,8 +144,7 @@ public:
     // Check whether the matrix created using h_inds is positive definite.
     // This is equivalent to checking whether the matrix given by clip
     // is symmetric, and whether all the eigenvalues are larger than zero.
-    // If d_x is not a NULL pointer, then computes the residual as well.
-    void analyse(int nnz, const int *h_inds, const Dtype *d_x);
+    void analyse(int nnz, const int *h_inds);
 
     // accessor
     shared_ptr<CSRWrapper<Dtype> > D() const { return D_; }
@@ -156,7 +156,8 @@ public:
 
 private:
     cusparseHandle_t *handle_;
-    cusolverSpHandle_t solver_handle_;
+    cusolverDnHandle_t dnsolver_handle_;
+    cusolverSpHandle_t spsolver_handle_;
     int n_;
     int m_;
     int N_;
