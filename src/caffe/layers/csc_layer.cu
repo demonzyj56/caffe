@@ -180,12 +180,6 @@ template <typename Dtype>
 void CSCLayer<Dtype>::Forward_gpu(const vector<Blob<Dtype>*>& bottom,
       const vector<Blob<Dtype>*>& top) {
   const vector<int> &bottom_shape = bottom[0]->shape();
-  /* Blob<Dtype> bottom_patch(bottom_patch_shape_); */
-  /* Blob<Dtype> alpha(top_patch_shape_); */
-  /* Blob<Dtype> grad(top_patch_shape_); */
-  /* Blob<Dtype> bottom_recon(bottom_shape); */
-  /* Blob<Dtype> alpha_diff(top_patch_shape_); */
-  /* Blob<Dtype> beta(top_patch_shape_); */
   Blob<Dtype> &bottom_patch = *this->bottom_patch_buffer_;
   Blob<Dtype> &alpha = *this->alpha_buffer_;
   Blob<Dtype> &grad = *this->grad_buffer_;
@@ -230,13 +224,7 @@ void CSCLayer<Dtype>::Forward_gpu(const vector<Blob<Dtype>*>& bottom,
       Dtype dot_val = 0.;
       caffe_gpu_dot(alpha_diff.count(), grad.gpu_data(), alpha_diff.gpu_data(), &dot_val);
       Dtype stop = loss + dot_val  + alpha_diff.sumsq_data()*eta/2. - loss_new;
-      /* if (stop < -1e-6) { */
-      /*   eta *= admm_eta_; */
-      /*   CHECK_LE(eta, 1e6) << "Value of lambda_max(DtD) blows up!"; */
-      /*   continue; */
-      /* } */
       if (stop >= 0) {
-      /* if (1) { */
         Dtype t_new = (1 + std::sqrt(1+4*t*t)) / 2.;
         Dtype coeff = (t-1) / t_new;
         caffe_copy(alpha.count(), alpha.gpu_data(), this->alpha_->mutable_gpu_data());
@@ -299,10 +287,6 @@ template <typename Dtype>
 void CSCLayer<Dtype>::Backward_gpu(const vector<Blob<Dtype>*>& top,
       const vector<bool>& propagate_down,
       const vector<Blob<Dtype>*>& bottom) {
-  /* Blob<Dtype> residual(bottom_patch_shape_); */
-  /* Blob<Dtype> Dlbeta(bottom_patch_shape_); */
-  /* Blob<Dtype> beta(top_patch_shape_); */
-  /* Blob<Dtype> bottom_recon(bottom[0]->shape()); */
   Blob<Dtype> &residual = *bottom_patch_buffer_;
   Blob<Dtype> &beta = *beta_buffer_;
   Blob<Dtype> &bottom_recon = *bottom_recon_buffer_;
@@ -312,20 +296,12 @@ void CSCLayer<Dtype>::Backward_gpu(const vector<Blob<Dtype>*>& top,
   Dtype *beta_data = beta.mutable_gpu_data();
   Dtype *beta_diff = beta.mutable_gpu_diff();
   // solve beta
-  /* set_if_kernel<Dtype><<<CAFFE_GET_BLOCKS(beta.count()), CAFFE_CUDA_NUM_THREADS>>>( */
-  /*   beta.count(), beta_data, beta_diff); */
-  /* CUDA_POST_KERNEL_CHECK; */
-  /* caffe_gpu_scal(beta.count(), Dtype(1./admm_max_rho_), beta_diff); */
   this->csc_inverse_gpu_(beta.count(), beta_diff, beta_data);
   // ------------------------------------------------------------------------
   if (this->param_propagate_down_[0]) {
   // ------------------------------------------------------------------------
-  // ------------------------------------------------------------------------
-  // ------------------------------------------------------------------------
     //first term
-    /* this->gemm_Dlalpha_gpu_(&beta, &Dlbeta, true); */
     this->gemm_Dlalpha_gpu_(&beta, &residual, true);
-    /* this->patches2im_gpu_(&Dlbeta, &bottom_recon, false); */
     this->patches2im_gpu_(&residual, &bottom_recon, false);
     caffe_gpu_sub(bottom[0]->count(), bottom[0]->gpu_data(), bottom_recon.gpu_data(),
       bottom_recon.mutable_gpu_data());
@@ -334,11 +310,8 @@ void CSCLayer<Dtype>::Backward_gpu(const vector<Blob<Dtype>*>& top,
       residual.shape(1), Dtype(1), residual.gpu_data(), beta.gpu_diff(),
       Dtype(0), this->blobs_[0]->mutable_gpu_diff());
   // ------------------------------------------------------------------------
-  // ------------------------------------------------------------------------
     //second term
-    /* this->gemm_Dlalpha_gpu_(&beta, &Dlbeta, false); */
     this->gemm_Dlalpha_gpu_(&beta, &residual, false);
-    /* this->patches2im_gpu_(&Dlbeta, &bottom_recon, false); */
     this->patches2im_gpu_(&residual, &bottom_recon, false);
     this->im2patches_gpu_(&bottom_recon, &residual, false);
     caffe_gpu_gemm(CblasNoTrans, CblasTrans, residual.shape(0), beta.shape(0),
@@ -357,8 +330,6 @@ void CSCLayer<Dtype>::Backward_gpu(const vector<Blob<Dtype>*>& top,
       &lambda1_diff);
     lambda1_diff /= bottom[0]->shape(0);
     this->set_lambda1_gpu_diff_(-lambda1_diff);
-    /* LOG(INFO) << "admm_max_rho_: " << admm_max_rho_ << "\n"; */
-    /* LOG(INFO) << "lambda1_diff" << lambda1_diff << "\n"; */
   } else {
     this->set_lambda1_gpu_diff_(Dtype(0));
   }
