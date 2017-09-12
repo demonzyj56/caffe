@@ -334,6 +334,28 @@ TYPED_TEST(CSRWrapperTest, TestClip) {
     }
 }
 
+TYPED_TEST(CSRWrapperTest, TestClipColumns) {
+    const TypeParam values[] = {1., -1., -3., -2., 5., 4., 6., 4., -4., 2., 7., 8., -5.};
+    const int columns[] = {0, 1, 3, 0, 1, 2, 3, 4, 0, 2, 3, 1, 4};
+    const int ptrB[] = {0, 3, 5, 8, 11, 13};
+    const int inds[] = {0, 1, 4};
+    const TypeParam values_clipped[] = {1., -1., -2., 5., 4., -4., 8., -5.};
+    const int columns_clipped[] = {0, 1, 0, 1, 2, 0, 1, 2};
+    const int ptrB_clipped[] = {0, 2, 4, 5, 6, 8};
+    this->csr_wrapper_->set_values(values);
+    this->csr_wrapper_->set_columns(columns);
+    this->csr_wrapper_->set_ptrB(ptrB);
+    shared_ptr<CSRWrapper<TypeParam> > clipped = this->csr_wrapper_->clip_columns(3, inds);
+    ASSERT_EQ(clipped->nnz(), 8);
+    for (int i = 0; i < 8; ++i) {
+        EXPECT_EQ(clipped->cpu_values()[i], values_clipped[i]);
+        EXPECT_EQ(clipped->cpu_columns()[i], columns_clipped[i]);
+    }
+    for (int i = 0; i < 6; ++i) {
+        EXPECT_EQ(clipped->cpu_ptrB()[i], ptrB_clipped[i]);
+    }
+}
+
 template <typename Dtype>
 class CSRWrapperTransposeTest : public GPUDeviceTest<Dtype> {
 protected:
@@ -478,10 +500,11 @@ TYPED_TEST(ConvDictWrapperTest, TestConvDictSanity) {
 }
 
 
-TYPED_TEST(ConvDictWrapperTest, TestLhsMatCreation) {
+TYPED_TEST(ConvDictWrapperTest, TestCreate) {
     int n = this->Dl_->shape(0);
     int m = this->Dl_->shape(1);
     this->conv_dict_->create();
+    EXPECT_TRUE(this->conv_dict_->DtDpl2I());
     EXPECT_EQ(this->conv_dict_->DtDpl2I()->row(), this->N_*m);
     EXPECT_EQ(this->conv_dict_->DtDpl2I()->col(), this->N_*m);
     EXPECT_TRUE(this->conv_dict_->DtDpl2I()->symmetric());
@@ -493,9 +516,24 @@ TYPED_TEST(ConvDictWrapperTest, TestLhsMatCreation) {
     }
 }
 
+TYPED_TEST(ConvDictWrapperTest, TestCreateClipped) {
+    int nnz = 10;
+    vector<int> inds(this->conv_dict_->D()->col());
+    for (int i = 0; i < inds.size(); ++i) {
+        inds[i] = i;
+    }
+    std::random_shuffle(inds.begin(), inds.end());
+    std::sort(inds.begin(), inds.begin() + nnz);
+    shared_ptr<CSRWrapper<TypeParam> > clipped =
+        this->conv_dict_->create_clipped(nnz, inds.data());
+    ASSERT_TRUE(clipped);
+    EXPECT_EQ(clipped->row(), clipped->col());
+    EXPECT_TRUE(clipped->symmetric());
+}
+
 TYPED_TEST(ConvDictWrapperTest, TestSolve) {
     int nnz = 10;
-    vector<int> inds(this->conv_dict_->DtDpl2I()->row());
+    vector<int> inds(this->conv_dict_->D()->col());
     for (int i = 0; i < inds.size(); ++i) {
         inds[i] = i;
     }
@@ -505,6 +543,21 @@ TYPED_TEST(ConvDictWrapperTest, TestSolve) {
     TypeParam *rhs_ptr = (TypeParam *)rhs.mutable_gpu_data();
     caffe_gpu_rng_gaussian(nnz, TypeParam(0), TypeParam(1), rhs_ptr);
     this->conv_dict_->create();
+    this->conv_dict_->solve(nnz, inds.data(), rhs_ptr);
+    this->conv_dict_->analyse(nnz, inds.data());
+}
+
+TYPED_TEST(ConvDictWrapperTest, TestSolveClipped) {
+    int nnz = 10;
+    vector<int> inds(this->conv_dict_->D()->col());
+    for (int i = 0; i < inds.size(); ++i) {
+        inds[i] = i;
+    }
+    std::random_shuffle(inds.begin(), inds.end());
+    std::sort(inds.begin(), inds.begin() + nnz);
+    SyncedMemory rhs(sizeof(TypeParam)*nnz);
+    TypeParam *rhs_ptr = (TypeParam *)rhs.mutable_gpu_data();
+    caffe_gpu_rng_gaussian(nnz, TypeParam(0), TypeParam(1), rhs_ptr);
     this->conv_dict_->solve(nnz, inds.data(), rhs_ptr);
     this->conv_dict_->analyse(nnz, inds.data());
 }
