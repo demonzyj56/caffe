@@ -1,5 +1,6 @@
 #include "caffe/util/conv_dict_wrapper.hpp"
 #include "caffe/util/math_functions.hpp"
+#include "caffe/util/benchmark.hpp"
 
 namespace caffe {
 
@@ -60,7 +61,7 @@ CSRWrapper<Dtype>::~CSRWrapper() {
 
 template <typename Dtype>
 Dtype *CSRWrapper<Dtype>::mutable_values() {
-    CHECK(nnz_ >= 0);
+    CHECK(nnz_ >= 0) << "nnz is " << nnz_;
     if (NULL == d_values_) {
         d_values_ = shared_ptr<SyncedMemory>(new SyncedMemory(sizeof(Dtype)*nnz_));
     }
@@ -69,7 +70,7 @@ Dtype *CSRWrapper<Dtype>::mutable_values() {
 
 template <typename Dtype>
 int *CSRWrapper<Dtype>::mutable_columns() {
-    CHECK(nnz_ >= 0);
+    CHECK(nnz_ >= 0) << "nnz is " << nnz_;
     if (NULL == d_columns_) {
         d_columns_ = shared_ptr<SyncedMemory>(new SyncedMemory(sizeof(int)*nnz_));
     }
@@ -78,7 +79,7 @@ int *CSRWrapper<Dtype>::mutable_columns() {
 
 template <typename Dtype>
 int *CSRWrapper<Dtype>::mutable_ptrB() {
-    CHECK(r_ > 0);
+    CHECK(r_ > 0) << "row number is " << r_;
     if (NULL == d_ptrB_) {
         d_ptrB_ = shared_ptr<SyncedMemory>(new SyncedMemory(sizeof(int)*(r_+1)));
     }
@@ -259,6 +260,47 @@ shared_ptr<CSRWrapper<Dtype> > CSRWrapper<Dtype>::clip(int nnz, const int *h_ind
     return clipped;
 }
 
+// TODO(leoyolo): change naive impl.
+template <typename Dtype>
+shared_ptr<CSRWrapper<Dtype> > CSRWrapper<Dtype>::clip_columns(int nnz, const int *h_inds) {
+    for (int i = 0; i < nnz-1; ++i) {
+        CHECK_LT(h_inds[i], h_inds[i+1]) << "The index set should be strictly increasing.";
+    }
+    shared_ptr<CSRWrapper<Dtype> > clipped(new CSRWrapper<Dtype>(handle_, r_, nnz, -1));
+    clipped->mutable_cpu_ptrB()[0] = 0;
+    for (int i = 0; i < r_; ++i) {
+        clipped->mutable_cpu_ptrB()[i+1] = clipped->mutable_cpu_ptrB()[i];
+        for (int j = cpu_ptrB()[i]; j < cpu_ptrE()[i]; ++j) {
+            int target = cpu_columns()[j];
+            for (int k = 0; k < nnz; ++k) {
+                if (h_inds[k] == target) {
+                    clipped->mutable_cpu_ptrB()[i+1] += 1;
+                    break;
+                }
+            }
+        }
+    }
+    clipped->set_nnz(clipped->cpu_ptrB()[r_]);
+    Dtype *clipped_cpu_values = clipped->mutable_cpu_values();
+    int *clipped_cpu_columns = clipped->mutable_cpu_columns();
+    for (int i = 0; i < r_; ++i) {
+        for (int j = cpu_ptrB()[i]; j < cpu_ptrE()[i]; ++j) {
+            Dtype target_value = cpu_values()[j];
+            int target_column = cpu_columns()[j];
+            for (int k = 0; k < nnz; ++k) {
+                if (h_inds[k] == target_column) {
+                    *clipped_cpu_values = target_value;
+                    *clipped_cpu_columns = k;
+                    clipped_cpu_values++;
+                    clipped_cpu_columns++;
+                    break;
+                }
+            }
+        }
+    }
+    return clipped;
+}
+
 // should create a cusolver handle
 template <typename Dtype>
 bool CSRWrapper<Dtype>::symmetric() {
@@ -281,7 +323,7 @@ ConvDictWrapper<Dtype>::ConvDictWrapper(cusparseHandle_t *handle, const Blob<Dty
     : handle_(handle), dnsolver_handle_(NULL), spsolver_handle_(NULL), n_(Dl->shape(0)),
     m_(Dl->shape(1)), N_(N), boundary_(boundary), lambda2_(lambda2),
     D_(new CSRWrapper<Dtype>(handle, N_, N_*m_, n_*m_*N_)),
-    DtDpl2I_(new CSRWrapper<Dtype>(handle, N_*m_, N_*m_, -1)) {
+    DtDpl2I_() {
     CHECK_EQ(boundary_, CSCParameter::CIRCULANT_BACK)
         << "Only circulant back boundary condtion is currently supported!";
     make_conv_dict_gpu(n_, m_, Dl->gpu_data(), N_, boundary_,
@@ -298,6 +340,9 @@ ConvDictWrapper<Dtype>::~ConvDictWrapper() {
 
 template <>
 void ConvDictWrapper<float>::create() {
+    if (NULL == DtDpl2I_) {
+        DtDpl2I_.reset(new CSRWrapper<float>(handle_, N_*m_, N_*m_, -1));
+    }
     int base, nnz;
     csrgemm2Info_t info = NULL;
     size_t bufferSize;
@@ -328,17 +373,16 @@ void ConvDictWrapper<float>::create() {
         identity->descr(), identity->nnz(), identity->ptrB(), identity->columns(),
         DtDpl2I_->descr(), DtDpl2I_->mutable_ptrB(), nnzTotalDevHostPtr,
         info, buffer.mutable_gpu_data()));
+    CUDA_CHECK(cudaMemcpy(&nnz, DtDpl2I_->ptrB()+DtDpl2I_->row(), sizeof(int), cudaMemcpyDeviceToHost));
+    CUDA_CHECK(cudaMemcpy(&base, DtDpl2I_->ptrB(), sizeof(int), cudaMemcpyDeviceToHost));
+    CHECK_EQ(base, 0);
+    nnz -= base;
     if (NULL != nnzTotalDevHostPtr) {
-        nnz = *nnzTotalDevHostPtr;
-        int nnz_local;
-        CUDA_CHECK(cudaMemcpy(&nnz_local, DtDpl2I_->ptrB()+DtDpl2I_->row(), sizeof(int),
-            cudaMemcpyDeviceToHost));
-    } else {
-        CUDA_CHECK(cudaMemcpy(&nnz, DtDpl2I_->ptrB()+DtDpl2I_->row(), sizeof(int), cudaMemcpyDeviceToHost));
-        CUDA_CHECK(cudaMemcpy(&base, DtDpl2I_->ptrB(), sizeof(int), cudaMemcpyDeviceToHost));
-        CHECK_EQ(base, 0);
-        nnz -= base;
+        CHECK_EQ(*nnzTotalDevHostPtr, nnz) << "Different values of nonzero!";
     }
+    LOG(INFO) << "Nonzeros: " << nnz << ", sparsity: " << float(nnz)/DtDpl2I_->row()/DtDpl2I_->col();
+    CHECK_GE(nnz, 0) << "An overflow of int32 value is suspected. "
+        << "Sadly there is noting we could do.  Dying...";
     DtDpl2I_->set_nnz(nnz);
     // step 4: finith sparsity pattern and value of C
     CUSPARSE_CHECK(cusparseScsrgemm2(*handle_, D_->col(), D_->col(), D_->row(), &alpha,
@@ -354,6 +398,9 @@ void ConvDictWrapper<float>::create() {
 
 template <>
 void ConvDictWrapper<double>::create() {
+    if (NULL == DtDpl2I_) {
+        DtDpl2I_.reset(new CSRWrapper<double>(handle_, N_*m_, N_*m_, -1));
+    }
     int base, nnz;
     csrgemm2Info_t info = NULL;
     size_t bufferSize;
@@ -406,34 +453,179 @@ void ConvDictWrapper<double>::create() {
 }
 
 template <>
+shared_ptr<CSRWrapper<float> > ConvDictWrapper<float>::create_clipped(int nind, const int *h_ind) {
+    // step 0: create transposed D and identity matrix and output
+    shared_ptr<CSRWrapper<float> > Dclipped = D_->clip_columns(nind, h_ind);
+    shared_ptr<CSRWrapper<float> > Dtrans = Dclipped->transpose();
+    shared_ptr<CSRWrapper<float> > identity =
+        shared_ptr<CSRWrapper<float> >(new CSRWrapper<float>(
+            handle_, Dclipped->col(), Dclipped->col(), Dclipped->col()));
+    shared_ptr<CSRWrapper<float> > lhs = shared_ptr<CSRWrapper<float> >(
+        new CSRWrapper<float>(handle_, Dclipped->col(), Dclipped->col(), -1));
+    identity->identity();
+    int base, nnz;
+    csrgemm2Info_t info = NULL;
+    size_t bufferSize;
+    int *nnzTotalDevHostPtr = &nnz;
+    float alpha = 1.;
+    float beta = lambda2_;
+    CUSPARSE_CHECK(cusparseSetPointerMode(*handle_, CUSPARSE_POINTER_MODE_HOST));
+    // step 1: create an opaque structure
+    CUSPARSE_CHECK(cusparseCreateCsrgemm2Info(&info));
+    // step 2: allocate buffer for csrgemm2Nnz and csrgemm2
+    CUSPARSE_CHECK(cusparseScsrgemm2_bufferSizeExt(
+        *handle_, Dclipped->col(), Dclipped->col(), Dclipped->row(), &alpha,
+        Dtrans->descr(), Dtrans->nnz(), Dtrans->ptrB(), Dtrans->columns(),
+        Dclipped->descr(), Dclipped->nnz(), Dclipped->ptrB(), Dclipped->columns(),
+        &beta,
+        identity->descr(), identity->nnz(), identity->ptrB(), identity->columns(),
+        info, &bufferSize));
+    SyncedMemory buffer(bufferSize);
+    //step 3: compute csrRowPtrC
+    CUSPARSE_CHECK(cusparseXcsrgemm2Nnz(*handle_, Dclipped->col(), Dclipped->col(), Dclipped->row(),
+        Dtrans->descr(), Dtrans->nnz(), Dtrans->ptrB(), Dtrans->columns(),
+        Dclipped->descr(), Dclipped->nnz(), Dclipped->ptrB(), Dclipped->columns(),
+        identity->descr(), identity->nnz(), identity->ptrB(), identity->columns(),
+        lhs->descr(), lhs->mutable_ptrB(), nnzTotalDevHostPtr,
+        info, buffer.mutable_gpu_data()));
+    CUDA_CHECK(cudaMemcpy(&nnz, lhs->ptrB()+lhs->row(), sizeof(int), cudaMemcpyDeviceToHost));
+    CUDA_CHECK(cudaMemcpy(&base, lhs->ptrB(), sizeof(int), cudaMemcpyDeviceToHost));
+    CHECK_EQ(base, 0);
+    nnz -= base;
+    if (NULL != nnzTotalDevHostPtr) {
+        CHECK_EQ(*nnzTotalDevHostPtr, nnz) << "Different values of nonzero!";
+    }
+    LOG(INFO) << "LHS matrix nonzeros: " << nnz << ", sparsity: " << float(nnz)/lhs->row()/lhs->col();
+    CHECK_GE(nnz, 0) << "An overflow of int32 value is suspected. "
+        << "Sadly there is noting we could do.  Dying...";
+    lhs->set_nnz(nnz);
+    // step 4: finith sparsity pattern and value of C
+    CUSPARSE_CHECK(cusparseScsrgemm2(*handle_, Dclipped->col(), Dclipped->col(), Dclipped->row(), &alpha,
+        Dtrans->descr(), Dtrans->nnz(), Dtrans->values(), Dtrans->ptrB(), Dtrans->columns(),
+        Dclipped->descr(), Dclipped->nnz(), Dclipped->values(), Dclipped->ptrB(), Dclipped->columns(),
+        &beta,
+        identity->descr(), identity->nnz(), identity->values(), identity->ptrB(), identity->columns(),
+        lhs->descr(), lhs->mutable_values(), lhs->mutable_ptrB(), lhs->mutable_columns(),
+        info, buffer.mutable_gpu_data()));
+    // step 5: destroy and free memory
+    CUSPARSE_CHECK(cusparseDestroyCsrgemm2Info(info));
+    return lhs;
+}
+template <>
+shared_ptr<CSRWrapper<double> > ConvDictWrapper<double>::create_clipped(int nind, const int *h_ind) {
+    // step 0: create transposed D and identity matrix and output
+    shared_ptr<CSRWrapper<double> > Dclipped = D_->clip_columns(nind, h_ind);
+    shared_ptr<CSRWrapper<double> > Dtrans = Dclipped->transpose();
+    shared_ptr<CSRWrapper<double> > identity =
+        shared_ptr<CSRWrapper<double> >(new CSRWrapper<double>(
+            handle_, Dclipped->col(), Dclipped->col(), Dclipped->col()));
+    shared_ptr<CSRWrapper<double> > lhs = shared_ptr<CSRWrapper<double> >(
+        new CSRWrapper<double>(handle_, Dclipped->col(), Dclipped->col(), -1));
+    identity->identity();
+    int base, nnz;
+    csrgemm2Info_t info = NULL;
+    size_t bufferSize;
+    int *nnzTotalDevHostPtr = &nnz;
+    double alpha = 1.;
+    double beta = lambda2_;
+    CUSPARSE_CHECK(cusparseSetPointerMode(*handle_, CUSPARSE_POINTER_MODE_HOST));
+    // step 1: create an opaque structure
+    CUSPARSE_CHECK(cusparseCreateCsrgemm2Info(&info));
+    // step 2: allocate buffer for csrgemm2Nnz and csrgemm2
+    CUSPARSE_CHECK(cusparseDcsrgemm2_bufferSizeExt(
+        *handle_, Dclipped->col(), Dclipped->col(), Dclipped->row(), &alpha,
+        Dtrans->descr(), Dtrans->nnz(), Dtrans->ptrB(), Dtrans->columns(),
+        Dclipped->descr(), Dclipped->nnz(), Dclipped->ptrB(), Dclipped->columns(),
+        &beta,
+        identity->descr(), identity->nnz(), identity->ptrB(), identity->columns(),
+        info, &bufferSize));
+    SyncedMemory buffer(bufferSize);
+    //step 3: compute csrRowPtrC
+    CUSPARSE_CHECK(cusparseXcsrgemm2Nnz(*handle_, Dclipped->col(), Dclipped->col(), Dclipped->row(),
+        Dtrans->descr(), Dtrans->nnz(), Dtrans->ptrB(), Dtrans->columns(),
+        Dclipped->descr(), Dclipped->nnz(), Dclipped->ptrB(), Dclipped->columns(),
+        identity->descr(), identity->nnz(), identity->ptrB(), identity->columns(),
+        lhs->descr(), lhs->mutable_ptrB(), nnzTotalDevHostPtr,
+        info, buffer.mutable_gpu_data()));
+    CUDA_CHECK(cudaMemcpy(&nnz, lhs->ptrB()+lhs->row(), sizeof(int), cudaMemcpyDeviceToHost));
+    CUDA_CHECK(cudaMemcpy(&base, lhs->ptrB(), sizeof(int), cudaMemcpyDeviceToHost));
+    CHECK_EQ(base, 0);
+    nnz -= base;
+    if (NULL != nnzTotalDevHostPtr) {
+        CHECK_EQ(*nnzTotalDevHostPtr, nnz) << "Different values of nonzero!";
+    }
+    LOG(INFO) << "LHS matrix nonzeros: " << nnz << ", sparsity: " << double(nnz)/lhs->row()/lhs->col();
+    CHECK_GE(nnz, 0) << "An overflow of int32 value is suspected. "
+        << "Sadly there is noting we could do.  Dying...";
+    lhs->set_nnz(nnz);
+    // step 4: finith sparsity pattern and value of C
+    CUSPARSE_CHECK(cusparseDcsrgemm2(*handle_, Dclipped->col(), Dclipped->col(), Dclipped->row(), &alpha,
+        Dtrans->descr(), Dtrans->nnz(), Dtrans->values(), Dtrans->ptrB(), Dtrans->columns(),
+        Dclipped->descr(), Dclipped->nnz(), Dclipped->values(), Dclipped->ptrB(), Dclipped->columns(),
+        &beta,
+        identity->descr(), identity->nnz(), identity->values(), identity->ptrB(), identity->columns(),
+        lhs->descr(), lhs->mutable_values(), lhs->mutable_ptrB(), lhs->mutable_columns(),
+        info, buffer.mutable_gpu_data()));
+    // step 5: destroy and free memory
+    CUSPARSE_CHECK(cusparseDestroyCsrgemm2Info(info));
+    return lhs;
+}
+
+template <>
 void ConvDictWrapper<float>::solve(int nnz, const int *h_inds, float *d_x) {
-    CHECK_GE(DtDpl2I_->nnz(), 0); // should be initialized by create()
-    shared_ptr<CSRWrapper<float> > clipped = DtDpl2I_->clip(nnz, h_inds);
+    CPUTimer timer;
+    timer.Start();
+    shared_ptr<CSRWrapper<float> > clipped;
+    if (NULL != DtDpl2I_) {
+        clipped = DtDpl2I_->clip(nnz, h_inds);
+        LOG(INFO) << "Using precomputed matrix to solve.";
+    } else {
+        clipped = create_clipped(nnz, h_inds);
+    }
+    LOG(INFO) << "Clip time: " << timer.Seconds() << "s.";
+    timer.Start();
     float tol = 1e-12;
     int reorder = 0;
     int singularity = 0;
     CUSOLVER_CHECK(cusolverSpScsrlsvchol(spsolver_handle_, clipped->row(), clipped->nnz(),
         clipped->descr(), clipped->values(), clipped->ptrB(), clipped->columns(),
         d_x, tol, reorder, d_x, &singularity));
+    LOG(INFO) << "Actual solving time: " << timer.Seconds() << "s.";
     CHECK_EQ(singularity, -1) << "Singularity value is " << singularity;
 }
 
 template <>
 void ConvDictWrapper<double>::solve(int nnz, const int *h_inds, double *d_x) {
-    CHECK_GE(DtDpl2I_->nnz(), 0); // should be initialized by create()
-    shared_ptr<CSRWrapper<double> > clipped = DtDpl2I_->clip(nnz, h_inds);
+    CPUTimer timer;
+    timer.Start();
+    shared_ptr<CSRWrapper<double> > clipped;
+    if (NULL != DtDpl2I_) {
+        clipped = DtDpl2I_->clip(nnz, h_inds);
+        LOG(INFO) << "Using precomputed matrix to solve.";
+    } else {
+        clipped = create_clipped(nnz, h_inds);
+    }
+    LOG(INFO) << "Clip time: " << timer.Seconds() << "s.";
+    timer.Start();
     double tol = 1e-12;
     int reorder = 0;
     int singularity = 0;
     CUSOLVER_CHECK(cusolverSpDcsrlsvchol(spsolver_handle_, clipped->row(), clipped->nnz(),
         clipped->descr(), clipped->values(), clipped->ptrB(), clipped->columns(),
         d_x, tol, reorder, d_x, &singularity));
+    LOG(INFO) << "Actual solving time: " << timer.Seconds() << "s.";
     CHECK_EQ(singularity, -1) << "Singularity value is " << singularity;
 }
 
 template <>
 void ConvDictWrapper<float>::analyse(int nnz, const int *h_inds) {
-    shared_ptr<CSRWrapper<float> > clipped = DtDpl2I_->clip(nnz, h_inds);
+    shared_ptr<CSRWrapper<float> > clipped;
+    if (NULL != DtDpl2I_) {
+        clipped = DtDpl2I_->clip(nnz, h_inds);
+        LOG(INFO) << "Analysing precomputed matrix.";
+    } else {
+        clipped = create_clipped(nnz, h_inds);
+    }
     CHECK(clipped->symmetric()) << "The clipped matrix is NOT symmetric.";
     SyncedMemory clipped_dense(clipped->row()*clipped->col()*sizeof(float));
     float *clipped_dense_gpu = (float *)clipped_dense.mutable_gpu_data();
@@ -459,7 +651,13 @@ void ConvDictWrapper<float>::analyse(int nnz, const int *h_inds) {
 }
 template <>
 void ConvDictWrapper<double>::analyse(int nnz, const int *h_inds) {
-    shared_ptr<CSRWrapper<double> > clipped = DtDpl2I_->clip(nnz, h_inds);
+    shared_ptr<CSRWrapper<double> > clipped;
+    if (NULL != DtDpl2I_) {
+        clipped = DtDpl2I_->clip(nnz, h_inds);
+        LOG(INFO) << "Analysing precomputed matrix.";
+    } else {
+        clipped = create_clipped(nnz, h_inds);
+    }
     CHECK(clipped->symmetric()) << "The clipped matrix is NOT symmetric.";
     SyncedMemory clipped_dense(clipped->row()*clipped->col()*sizeof(double));
     double *clipped_dense_gpu = (double *)clipped_dense.mutable_gpu_data();

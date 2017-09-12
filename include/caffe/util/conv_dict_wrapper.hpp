@@ -18,6 +18,11 @@ template <typename Dtype>
 void make_conv_dict_gpu(const int n, const int m, const Dtype *Dl, const int N, 
     CSCParameter::Boundary boundary, Dtype *values, int *columns, int *ptrB);
 
+
+// Check whether the val is contained in the array arr.
+bool contains_cpu(int val, int n, const int *arr);
+bool contains_gpu(int val, int n, const int *arr);
+
 #define CUSPARSE_CHECK(condition) do{ \
     cusparseStatus_t status = condition; \
     CHECK_EQ(status, CUSPARSE_STATUS_SUCCESS) \
@@ -105,7 +110,13 @@ public:
     void to_dense(Dtype *d_dense);
     // Remove and keep only indices appeared in inds.
     shared_ptr<CSRWrapper<Dtype> > clip(int nnz, const int *h_inds);
+    // Remove the columns that appeared in inds.
+    shared_ptr<CSRWrapper<Dtype> > clip_columns(int nnz, const int *h_inds);
     bool symmetric();
+
+protected:
+    // Impl on device side
+    shared_ptr<CSRWrapper<Dtype> > clip_columns_gpu_(int nnz, const int *h_inds);
 
 private:
     cusparseHandle_t *handle_;
@@ -153,6 +164,11 @@ public:
     // Create the base matrix (DtD+lambda2*I).
     // Use the cusparseScsrgemm2 routine.
     void create();
+
+    // Create the clipped matrix using the indices.
+    // This prevents from creating a large matrix, but requires
+    // matrix multiplication for each step.
+    shared_ptr<CSRWrapper<Dtype> > create_clipped(int nnz, const int *h_inds);
 
 private:
     cusparseHandle_t *handle_;

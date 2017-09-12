@@ -1,5 +1,9 @@
 #include "caffe/util/conv_dict_wrapper.hpp"
 #include "caffe/util/math_functions.hpp"
+#include "thrust/replace.h"
+#include "thrust/count.h"
+#include "thrust/copy.h"
+#include <algorithm>
 
 namespace caffe {
 template <typename Dtype>
@@ -66,9 +70,65 @@ CSRWrapper<Dtype> &CSRWrapper<Dtype>::identity() {
     return *this;
 }
 
+struct Contains {
+    Contains(int nnz, const int *inds) : nnz_(nnz), inds_(inds) {}
+    __host__ __device__ bool operator()(const int &x) const {
+        return true;
+    }
+
+    int nnz_;
+    const int *inds_;
+};
+
+struct EqualsMinusOne {
+    __host__ __device__ bool operator()(const int &x) const {
+        return x == -1;
+    }
+};
+
+template <typename Dtype>
+shared_ptr<CSRWrapper<Dtype> > CSRWrapper<Dtype>::clip_columns_gpu_(int nnz, const int *h_inds) {
+    CHECK_GE(nnz_, nnz);
+    for (int i = 0; i < nnz-1; ++i) {
+        CHECK_LT(h_inds[i], h_inds[i+1]) << "The index set should be strictly increasing.";
+    }
+    shared_ptr<CSRWrapper<Dtype> > clipped(new CSRWrapper<Dtype>(handle_, r_, nnz, -1));
+    SyncedMemory columns_buffer(sizeof(int)*nnz_);
+    Contains contains(nnz, h_inds);
+    EqualsMinusOne equals_minus_one;
+    thrust::replace_copy_if(columns(), columns()+nnz_,
+        (int *)columns_buffer.mutable_gpu_data(), contains, -1);
+    clipped->mutable_cpu_ptrB()[0] = 0;
+    for (int i = 0; i < r_; ++i) {
+        clipped->mutable_cpu_ptrB()[i+1] = clipped->mutable_cpu_ptrB()[i] +
+            thrust::count_if(
+                (int *)columns_buffer.mutable_gpu_data()+cpu_ptrB()[i],
+                (int *)columns_buffer.mutable_gpu_data()+cpu_ptrE()[i],
+                equals_minus_one);
+    }
+    int nnz_clipped = clipped->mutable_cpu_ptrB()[r_];
+    clipped->set_nnz(nnz_clipped);
+    thrust::copy_if(
+        values(),
+        values()+nnz_clipped,
+        (const int *)columns_buffer.gpu_data(),
+        clipped->mutable_values(),
+        equals_minus_one);
+    thrust::copy_if(
+        columns(),
+        columns()+nnz_clipped,
+        (const int *)columns_buffer.gpu_data(),
+        clipped->mutable_columns(),
+        equals_minus_one);
+
+    return clipped;
+}
+
 // require instaniation
 template CSRWrapper<float>  &CSRWrapper<float>::identity();
 template CSRWrapper<double> &CSRWrapper<double>::identity();
+template shared_ptr<CSRWrapper<float> > CSRWrapper<float>::clip_columns_gpu_(int nnz, const int *h_inds);
+template shared_ptr<CSRWrapper<double> > CSRWrapper<double>::clip_columns_gpu_(int nnz, const int *h_inds);
 
 template void make_conv_dict_gpu<float>(const int n, const int m, const float *d_Dl, const int N,
     CSCParameter::Boundary boundary, float *d_values, int *d_columns, int *d_ptrB);
