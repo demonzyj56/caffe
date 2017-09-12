@@ -292,11 +292,14 @@ void CSCLayer<Dtype>::Backward_gpu(const vector<Blob<Dtype>*>& top,
   Blob<Dtype> &bottom_recon = *bottom_recon_buffer_;
   // ------------------------------------------------------------------------
   // use beta as buffer for top diff in patch view
-  this->permute_num_channels_gpu_(top[0], &beta, true);
+  /* this->permute_num_channels_gpu_(top[0], &beta, true); */
+  /* const Dtype *beta_data = beta.mutable_gpu_data(); */
+  /* Dtype *beta_diff = beta.mutable_gpu_diff(); */
+  /* // solve beta */
+  /* this->csc_inverse_(beta.count(), beta_data, beta_diff); */
+  csc_inverse_(top[0], &beta);
   const Dtype *beta_data = beta.mutable_gpu_data();
   Dtype *beta_diff = beta.mutable_gpu_diff();
-  // solve beta
-  this->csc_inverse_(beta.count(), beta_data, beta_diff);
   // ------------------------------------------------------------------------
   if (this->param_propagate_down_[0]) {
   // ------------------------------------------------------------------------
@@ -368,6 +371,7 @@ void CSCLayer<Dtype>::caffe_gpu_soft_thresholding_(const int n, Dtype thresh, Dt
 }
 
 // It is actually to swap the num and channels dim in top.
+/*
 template <typename Dtype>
 void CSCLayer<Dtype>::permute_num_channels_gpu_(const Blob<Dtype> *top, Blob<Dtype> *patches,
 	bool permute_diff) {
@@ -387,7 +391,7 @@ void CSCLayer<Dtype>::permute_num_channels_gpu_(const Blob<Dtype> *top, Blob<Dty
 		}
 	}
 }
-
+*/
 template <typename Dtype>
 Dtype CSCLayer<Dtype>::get_lambda1_gpu_data_() const {
   CHECK(this->blobs_[1].get());

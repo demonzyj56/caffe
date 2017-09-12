@@ -49,14 +49,24 @@ class CSCLayer : public Layer<Dtype> {
   void patches2im_cpu_(const Blob<Dtype> *patches, Blob<Dtype> *blob, bool compute_diff);
   void gemm_Dlalpha_cpu_(const Blob<Dtype> *alpha, Blob<Dtype> *Dlalpha,
       bool prefer_data);
-  void permute_num_channels_cpu_(const Blob<Dtype> *top, Blob<Dtype> *patches,
+  void permute_num_channels_(const Blob<Dtype> *top, Blob<Dtype> *patches,
       bool permute_diff);
-  void permute_num_channels_gpu_(const Blob<Dtype> *top, Blob<Dtype> *patches,
-	  bool permute_diff);
+  // void permute_num_channels_cpu_(const Blob<Dtype> *top, Blob<Dtype> *patches,
+  //     bool permute_diff);
+  // void permute_num_channels_gpu_(const Blob<Dtype> *top, Blob<Dtype> *patches,
+  //     bool permute_diff);
   void caffe_gpu_soft_thresholding_(const int n, Dtype thresh, Dtype *x);
   void caffe_cpu_soft_thresholding_(const int n, Dtype thresh, Dtype *x);
 
-  void csc_inverse_(const int n, const Dtype* data, Dtype *diff);
+  // beta is of top_patch_shape_
+  // Each column of beta is the result of
+  // (DtD+lambda2I)*beta_data = beta_diff.
+  //
+  // 1. Create rhs and rhs.  This is equivalent to transposing beta.
+  // 2. Compute the nonzero entries and indices for each samples.
+  // 3. Create the big matrix.  This is warpped.
+  // 4. Put the entries back to the corresponding indices.
+  void csc_inverse_(const Blob<Dtype> *top, Blob<Dtype> *beta);
 
 
   void im2patches_gpu_(const Blob<Dtype> *blob, Blob<Dtype> *patches, bool compute_diff);

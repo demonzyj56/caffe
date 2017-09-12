@@ -8,25 +8,25 @@
 #include "caffe/test/test_caffe_main.hpp"
 
 namespace caffe {
-template <typename TypeParam>
-class CSCLayerTest : public MultiDeviceTest<TypeParam> {
-  typedef typename TypeParam::Dtype Dtype;
+// forget cpu test and test only on gpu
+template <typename Dtype>
+class CSCLayerTest : public GPUDeviceTest<Dtype> {
+  // typedef typename TypeParam::Dtype Dtype;
  protected:
   CSCLayerTest()
       : blob_bottom_(new Blob<Dtype>(10, 3, 32, 32)), blob_top_(new Blob<Dtype>()) {
     FillerParameter filler_param;
     GaussianFiller<Dtype> filler(filler_param);
-    // UniformFiller<Dtype> filler(filler_param);
     filler.Fill(this->blob_bottom_);
     this->blob_bottom_vec_.push_back(blob_bottom_);
     this->blob_top_vec_.push_back(blob_top_);
-	lambda1_ = 1e-2;
+	lambda1_ = 1e-1;
 	lambda2_ = 1.;
 	admm_eta_ = 1.5;
 	kernel_h_ = 6;
 	kernel_w_ = 6;
-	num_output_ = 1600;
-	admm_max_iter_ = 1;
+	num_output_ = 100;
+	admm_max_iter_ = 1000;
   }
   virtual ~CSCLayerTest() {
     for (size_t i = 0; i < blob_bottom_vec_.size(); ++i) {
@@ -50,32 +50,33 @@ class CSCLayerTest : public MultiDeviceTest<TypeParam> {
   int num_output_;
 };
 
-TYPED_TEST_CASE(CSCLayerTest, TestDtypesAndDevices);
+// TYPED_TEST_CASE(CSCLayerTest, TestDtypesAndDevices);
+TYPED_TEST_CASE(CSCLayerTest, TestDtypes);
 
 TYPED_TEST(CSCLayerTest, TestSetUp) {
-  typedef typename TypeParam::Dtype Dtype;
+  // typedef typename TypeParam::Dtype Dtype;
   LayerParameter layer_param;
   CSCParameter * csc_param = layer_param.mutable_csc_param();
   csc_param->set_kernel_h(this->kernel_h_);
   csc_param->set_kernel_w(this->kernel_w_);
   csc_param->set_num_output(this->num_output_);
-  shared_ptr<CSCLayer<Dtype> > layer(
-    new CSCLayer<Dtype>(layer_param));
+  shared_ptr<CSCLayer<TypeParam> > layer(
+    new CSCLayer<TypeParam>(layer_param));
   layer->SetUp(this->blob_bottom_vec_, this->blob_top_vec_);
-  vector<shared_ptr<Blob<Dtype> > > &blobs = layer->blobs();
+  vector<shared_ptr<Blob<TypeParam> > > &blobs = layer->blobs();
   EXPECT_EQ(this->blob_top_->num(), 10);
-  EXPECT_EQ(this->blob_top_->channels(), 1600);
+  EXPECT_EQ(this->blob_top_->channels(), this->num_output_);
   EXPECT_EQ(this->blob_top_->height(), 27);
   EXPECT_EQ(this->blob_top_->width(), 27);
   EXPECT_EQ(blobs.size(), 2);
   EXPECT_EQ(blobs[0]->shape().size(), 2);
   EXPECT_EQ(blobs[0]->shape(0), 108);
-  EXPECT_EQ(blobs[0]->shape(1), 1600);
+  EXPECT_EQ(blobs[0]->shape(1), this->num_output_);
   EXPECT_EQ(blobs[1]->count(), 1);
 }
 
 TYPED_TEST(CSCLayerTest, TestForwardSanity) {
-  typedef typename TypeParam::Dtype Dtype;
+  // typedef typename TypeParam::Dtype Dtype;
   LayerParameter layer_param;
   CSCParameter * csc_param = layer_param.mutable_csc_param();
   csc_param->set_lambda1(this->lambda1_);
@@ -88,14 +89,14 @@ TYPED_TEST(CSCLayerTest, TestForwardSanity) {
   csc_param->mutable_filler()->set_type("gaussian");
   csc_param->mutable_filler()->set_mean(0.);
   csc_param->mutable_filler()->set_std(1.);
-  shared_ptr<CSCLayer<Dtype> > layer(
-    new CSCLayer<Dtype>(layer_param));
+  shared_ptr<CSCLayer<TypeParam> > layer(
+    new CSCLayer<TypeParam>(layer_param));
   layer->SetUp(this->blob_bottom_vec_, this->blob_top_vec_);
   layer->Forward(this->blob_bottom_vec_, this->blob_top_vec_);
 }
-
+/*
 TYPED_TEST(CSCLayerTest, TestBackwardSanity) {
-  typedef typename TypeParam::Dtype Dtype;
+  // typedef typename TypeParam::Dtype Dtype;
   LayerParameter layer_param;
   CSCParameter * csc_param = layer_param.mutable_csc_param();
   csc_param->set_lambda1(this->lambda1_);
@@ -110,17 +111,17 @@ TYPED_TEST(CSCLayerTest, TestBackwardSanity) {
   csc_param->mutable_filler()->set_std(1.);
   vector<bool> propagate_down(1);
   propagate_down[0] = true;
-  shared_ptr<CSCLayer<Dtype> > layer(
-    new CSCLayer<Dtype>(layer_param));
+  shared_ptr<CSCLayer<TypeParam> > layer(
+    new CSCLayer<TypeParam>(layer_param));
   layer->SetUp(this->blob_bottom_vec_, this->blob_top_vec_);
   layer->Forward(this->blob_bottom_vec_, this->blob_top_vec_);
   layer->Backward(this->blob_top_vec_, propagate_down,
     this->blob_bottom_vec_);
 
 }
-
-TYPED_TEST(CSCLayerTest, TestBoundaryPadFront) {
-  typedef typename TypeParam::Dtype Dtype;
+*/
+TYPED_TEST(CSCLayerTest, TestBoundaryCirculantBack) {
+  // typedef typename TypeParam::Dtype Dtype;
   LayerParameter layer_param;
   CSCParameter * csc_param = layer_param.mutable_csc_param();
   csc_param->set_lambda1(this->lambda1_);
@@ -130,23 +131,23 @@ TYPED_TEST(CSCLayerTest, TestBoundaryPadFront) {
   csc_param->set_kernel_w(this->kernel_w_);
   csc_param->set_num_output(this->num_output_);
   csc_param->set_admm_max_iter(this->admm_max_iter_);
-  csc_param->set_boundary(CSCParameter::PAD_FRONT);
+  csc_param->set_boundary(CSCParameter::CIRCULANT_BACK);
+  csc_param->set_verbose(true);
   csc_param->mutable_filler()->set_type("gaussian");
   csc_param->mutable_filler()->set_mean(0.);
   csc_param->mutable_filler()->set_std(1.);
   vector<bool> propagate_down(1);
   propagate_down[0] = true;
-  shared_ptr<CSCLayer<Dtype> > layer(
-    new CSCLayer<Dtype>(layer_param));
+  shared_ptr<CSCLayer<TypeParam> > layer(
+    new CSCLayer<TypeParam>(layer_param));
   layer->SetUp(this->blob_bottom_vec_, this->blob_top_vec_);
   layer->Forward(this->blob_bottom_vec_, this->blob_top_vec_);
-  layer->Backward(this->blob_top_vec_, propagate_down,
-    this->blob_bottom_vec_);
   EXPECT_EQ(this->blob_top_->num(), 10);
-  EXPECT_EQ(this->blob_top_->channels(), 1600);
+  EXPECT_EQ(this->blob_top_->channels(), this->num_output_);
   EXPECT_EQ(this->blob_top_->height(), 32);
   EXPECT_EQ(this->blob_top_->width(), 32);
-
+  layer->Backward(this->blob_top_vec_, propagate_down,
+    this->blob_bottom_vec_);
 }
 
 } // namespace caffe

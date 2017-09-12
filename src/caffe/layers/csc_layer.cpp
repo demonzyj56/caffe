@@ -4,6 +4,7 @@
 #include "caffe/layers/csc_layer.hpp"
 #include "caffe/util/benchmark.hpp"
 #include "caffe/util/im2patches.hpp"
+#include "caffe/util/conv_dict_wrapper.hpp"
 
 namespace caffe {
 
@@ -228,7 +229,7 @@ void CSCLayer<Dtype>::Backward_cpu(const vector<Blob<Dtype>*>& top,
   Dtype *beta_diff = beta.mutable_cpu_diff();
   // ------------------------------------------------------------------------
   // use beta as buffer for top diff in patch view
-  this->permute_num_channels_cpu_(top[0], &beta, true);
+  this->permute_num_channels_(top[0], &beta, true);
   // ------------------------------------------------------------------------
   if (this->param_propagate_down_[0]) {
   // ------------------------------------------------------------------------
@@ -477,7 +478,7 @@ void CSCLayer<Dtype>::gemm_Dlalpha_cpu_(const Blob<Dtype> *alpha, Blob<Dtype> *D
 
 // It is actually to swap the num and channels dim in top.
 template <typename Dtype>
-void CSCLayer<Dtype>::permute_num_channels_cpu_(const Blob<Dtype> *top, Blob<Dtype> *patches,
+void CSCLayer<Dtype>::permute_num_channels_(const Blob<Dtype> *top, Blob<Dtype> *patches,
       bool permute_diff) {
   CHECK_EQ(patches->shape(0), top->shape(1));
   CHECK_EQ(patches->shape(1), top->shape(0)*top->shape(2)*top->shape(3));
@@ -488,10 +489,10 @@ void CSCLayer<Dtype>::permute_num_channels_cpu_(const Blob<Dtype> *top, Blob<Dty
     int source_offset = i * patch_width;
     int target_offset = c * patches->shape(1) + n * patch_width;
     caffe_copy(patch_width, top->cpu_data() + source_offset,
-      patches->mutable_cpu_data() + target_offset);
+      patches->mutable_gpu_data() + target_offset);
     if (permute_diff) {
       caffe_copy(patch_width, top->cpu_diff() + source_offset,
-        patches->mutable_cpu_diff() + target_offset);
+        patches->mutable_gpu_diff() + target_offset);
     }
   }
 }
@@ -504,9 +505,50 @@ void CSCLayer<Dtype>::caffe_cpu_soft_thresholding_(const int n, Dtype thresh, Dt
 	}
 }
 
+//! Yet another naive implementation.
 template <typename Dtype>
-void CSCLayer<Dtype>::csc_inverse_(const int n, const Dtype *data, Dtype *diff) {
-    NOT_IMPLEMENTED;
+void CSCLayer<Dtype>::csc_inverse_(const Blob<Dtype> *top, Blob<Dtype> *beta) {
+    CusparseHandle handle;
+    ConvDictWrapper<Dtype> conv_dict(handle.get(), this->blobs_[0].get(), top->shape(2)*top->shape(3),
+        boundary_, lambda2_);
+    LOG_IF(INFO, verbose_) << "Creating slice dictionary";
+    // conv_dict.create();
+    this->permute_num_channels_(top, beta, true);
+    Dtype *beta_ptr = beta->mutable_cpu_data();
+    int m = top->shape(1);
+    int N = top->shape(2)*top->shape(3);
+    SyncedMemory buffer(N*m*sizeof(Dtype));
+    for (int n = 0; n < top->shape(0); ++n) {
+        LOG_IF(INFO, verbose_) << "Working on " << n+1 << "/" << top->shape(0) << " samples";
+        vector<int> indices;
+        Dtype *buffer_ptr = (Dtype *)buffer.mutable_cpu_data();
+        for (int i = 0; i < N*m; ++i) {
+            int r = i % m;
+            int c = i / m + n*N;
+            int offset = r*N*top->shape(0) + c;
+            if (std::fabs(beta_ptr[offset]) > 1e-9) {
+                *buffer_ptr = beta_ptr[offset];
+                buffer_ptr++;
+                indices.push_back(i);
+            }
+        }
+        LOG_IF(INFO, verbose_) << "RHS Nonzeros: " << indices.size()
+            << ", sparsity: " << float(indices.size())/N/m;
+        LOG_IF(INFO, verbose_) << "Solving for beta...";
+        CPUTimer timer;
+        timer.Start();
+        // buffer is synced automatically
+        conv_dict.solve(indices.size(), indices.data(), (Dtype *)buffer.mutable_gpu_data());
+        LOG_IF(INFO, verbose_) << "Done solving in " << timer.Seconds() << "s.";
+        buffer_ptr = (Dtype *)buffer.mutable_cpu_data();
+        for (int j = 0; j < indices.size(); ++j) {
+            int ind = indices[j];
+            int r = ind % m;
+            int c = ind / m + n*N;
+            int offset = r*N*top->shape(0) + c;
+            beta_ptr[offset] = buffer_ptr[j];
+        }
+    }
 }
 
 
