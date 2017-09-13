@@ -8,6 +8,7 @@
 #include "cusparse.h"
 #include "cusolverDn.h"  // for computing eigenvalues
 #include "cusolverSp.h"
+#include "caffe/util/math_functions.hpp"
 
 namespace caffe {
 
@@ -18,10 +19,6 @@ template <typename Dtype>
 void make_conv_dict_gpu(const int n, const int m, const Dtype *Dl, const int N, 
     CSCParameter::Boundary boundary, Dtype *values, int *columns, int *ptrB);
 
-
-// Check whether the val is contained in the array arr.
-bool contains_cpu(int val, int n, const int *arr);
-bool contains_gpu(int val, int n, const int *arr);
 
 #define CUSPARSE_CHECK(condition) do{ \
     cusparseStatus_t status = condition; \
@@ -112,11 +109,16 @@ public:
     shared_ptr<CSRWrapper<Dtype> > clip(int nnz, const int *h_inds);
     // Remove the columns that appeared in inds.
     shared_ptr<CSRWrapper<Dtype> > clip_columns(int nnz, const int *h_inds);
+    shared_ptr<CSRWrapper<Dtype> > clip_columns_gpu(int nnz, const int *inds) {
+        SyncedMemory d_inds(sizeof(int)*nnz);
+        caffe_copy(nnz, inds, (int *)d_inds.mutable_gpu_data());
+        return clip_columns_gpu_(nnz, (const int *)d_inds.gpu_data());
+    }
     bool symmetric();
 
 protected:
-    // Impl on device side
-    shared_ptr<CSRWrapper<Dtype> > clip_columns_gpu_(int nnz, const int *h_inds);
+    // Impl on device side.  Note the indices value is also on device side.
+    shared_ptr<CSRWrapper<Dtype> > clip_columns_gpu_(int nnz, const int *d_inds);
 
 private:
     cusparseHandle_t *handle_;

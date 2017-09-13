@@ -1,9 +1,13 @@
 #include "caffe/util/conv_dict_wrapper.hpp"
 #include "caffe/util/math_functions.hpp"
-#include "thrust/replace.h"
+#include "thrust/execution_policy.h"
 #include "thrust/count.h"
 #include "thrust/copy.h"
-#include <algorithm>
+#include "thrust/find.h"
+#include "thrust/device_vector.h"
+#include "thrust/device_ptr.h"
+#include "thrust/functional.h"
+#include "thrust/equal.h"
 
 namespace caffe {
 template <typename Dtype>
@@ -70,65 +74,57 @@ CSRWrapper<Dtype> &CSRWrapper<Dtype>::identity() {
     return *this;
 }
 
-struct Contains {
-    Contains(int nnz, const int *inds) : nnz_(nnz), inds_(inds) {}
-    __host__ __device__ bool operator()(const int &x) const {
-        return true;
+struct InverseIndex {
+    explicit InverseIndex(int nnz, const int *d_inds, int not_found)
+        : nnz_(nnz), not_found_(not_found),
+        inds_(thrust::device_pointer_cast(d_inds)) {}
+    __host__ __device__ int operator()(const int &x) const {
+        thrust::device_ptr<const int> found = thrust::find(thrust::device, inds_, inds_+nnz_, x);
+        return (found != inds_+nnz_ ? found-inds_ : not_found_);
     }
-
     int nnz_;
-    const int *inds_;
+    int not_found_;
+    thrust::device_ptr<const int> inds_;
 };
 
-struct EqualsMinusOne {
-    __host__ __device__ bool operator()(const int &x) const {
-        return x == -1;
+struct NonNegative {
+    __host__ __device__ bool operator()(int x) {
+        return x >= 0;
     }
 };
 
 template <typename Dtype>
-shared_ptr<CSRWrapper<Dtype> > CSRWrapper<Dtype>::clip_columns_gpu_(int nnz, const int *h_inds) {
+shared_ptr<CSRWrapper<Dtype> > CSRWrapper<Dtype>::clip_columns_gpu_(int nnz, const int *d_inds) {
     CHECK_GE(nnz_, nnz);
-    for (int i = 0; i < nnz-1; ++i) {
-        CHECK_LT(h_inds[i], h_inds[i+1]) << "The index set should be strictly increasing.";
-    }
+    thrust::device_ptr<const int> thrust_inds = thrust::device_pointer_cast(d_inds);
+    CHECK(thrust::equal(thrust::device, thrust_inds, thrust_inds+nnz-1, thrust_inds+1, thrust::less<int>()));
+
     shared_ptr<CSRWrapper<Dtype> > clipped(new CSRWrapper<Dtype>(handle_, r_, nnz, -1));
-    SyncedMemory columns_buffer(sizeof(int)*nnz_);
-    Contains contains(nnz, h_inds);
-    EqualsMinusOne equals_minus_one;
-    thrust::replace_copy_if(columns(), columns()+nnz_,
-        (int *)columns_buffer.mutable_gpu_data(), contains, -1);
+    thrust::device_vector<int> stencil(nnz_, -1);
+    thrust::device_ptr<Dtype> thrust_values = thrust::device_pointer_cast(mutable_values());
+    thrust::device_ptr<int> thrust_columns = thrust::device_pointer_cast(mutable_columns());
+    InverseIndex inverse_index(nnz, d_inds, -1);
+    NonNegative non_negative;
+    thrust::transform(thrust::device, thrust_columns, thrust_columns + nnz_, stencil.begin(), inverse_index);
     clipped->mutable_cpu_ptrB()[0] = 0;
     for (int i = 0; i < r_; ++i) {
         clipped->mutable_cpu_ptrB()[i+1] = clipped->mutable_cpu_ptrB()[i] +
-            thrust::count_if(
-                (int *)columns_buffer.mutable_gpu_data()+cpu_ptrB()[i],
-                (int *)columns_buffer.mutable_gpu_data()+cpu_ptrE()[i],
-                equals_minus_one);
+            thrust::count_if(thrust::device, stencil.begin() + cpu_ptrB()[i],
+                stencil.begin() + cpu_ptrE()[i], non_negative);
     }
-    int nnz_clipped = clipped->mutable_cpu_ptrB()[r_];
-    clipped->set_nnz(nnz_clipped);
-    thrust::copy_if(
-        values(),
-        values()+nnz_clipped,
-        (const int *)columns_buffer.gpu_data(),
-        clipped->mutable_values(),
-        equals_minus_one);
-    thrust::copy_if(
-        columns(),
-        columns()+nnz_clipped,
-        (const int *)columns_buffer.gpu_data(),
-        clipped->mutable_columns(),
-        equals_minus_one);
-
+    clipped->set_nnz(clipped->mutable_cpu_ptrB()[r_]);
+    thrust::copy_if(thrust::device, thrust_values, thrust_values + nnz_, stencil.begin(),
+        thrust::device_pointer_cast(clipped->mutable_values()), non_negative);
+    thrust::copy_if(thrust::device, stencil.begin(), stencil.end(),
+        thrust::device_pointer_cast(clipped->mutable_columns()), non_negative);
     return clipped;
 }
 
 // require instaniation
 template CSRWrapper<float>  &CSRWrapper<float>::identity();
 template CSRWrapper<double> &CSRWrapper<double>::identity();
-template shared_ptr<CSRWrapper<float> > CSRWrapper<float>::clip_columns_gpu_(int nnz, const int *h_inds);
-template shared_ptr<CSRWrapper<double> > CSRWrapper<double>::clip_columns_gpu_(int nnz, const int *h_inds);
+template shared_ptr<CSRWrapper<float> > CSRWrapper<float>::clip_columns_gpu_(int nnz, const int *d_inds);
+template shared_ptr<CSRWrapper<double> > CSRWrapper<double>::clip_columns_gpu_(int nnz, const int *d_inds);
 
 template void make_conv_dict_gpu<float>(const int n, const int m, const float *d_Dl, const int N,
     CSCParameter::Boundary boundary, float *d_values, int *d_columns, int *d_ptrB);

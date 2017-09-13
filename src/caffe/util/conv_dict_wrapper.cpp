@@ -455,7 +455,7 @@ void ConvDictWrapper<double>::create() {
 template <>
 shared_ptr<CSRWrapper<float> > ConvDictWrapper<float>::create_clipped(int nind, const int *h_ind) {
     // step 0: create transposed D and identity matrix and output
-    shared_ptr<CSRWrapper<float> > Dclipped = D_->clip_columns(nind, h_ind);
+    shared_ptr<CSRWrapper<float> > Dclipped = D_->clip_columns_gpu(nind, h_ind);
     shared_ptr<CSRWrapper<float> > Dtrans = Dclipped->transpose();
     shared_ptr<CSRWrapper<float> > identity =
         shared_ptr<CSRWrapper<float> >(new CSRWrapper<float>(
@@ -514,7 +514,7 @@ shared_ptr<CSRWrapper<float> > ConvDictWrapper<float>::create_clipped(int nind, 
 template <>
 shared_ptr<CSRWrapper<double> > ConvDictWrapper<double>::create_clipped(int nind, const int *h_ind) {
     // step 0: create transposed D and identity matrix and output
-    shared_ptr<CSRWrapper<double> > Dclipped = D_->clip_columns(nind, h_ind);
+    shared_ptr<CSRWrapper<double> > Dclipped = D_->clip_columns_gpu(nind, h_ind);
     shared_ptr<CSRWrapper<double> > Dtrans = Dclipped->transpose();
     shared_ptr<CSRWrapper<double> > identity =
         shared_ptr<CSRWrapper<double> >(new CSRWrapper<double>(

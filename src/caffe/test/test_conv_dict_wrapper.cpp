@@ -356,6 +356,28 @@ TYPED_TEST(CSRWrapperTest, TestClipColumns) {
     }
 }
 
+TYPED_TEST(CSRWrapperTest, TestClipColumnsGpu) {
+    const TypeParam values[] = {1., -1., -3., -2., 5., 4., 6., 4., -4., 2., 7., 8., -5.};
+    const int columns[] = {0, 1, 3, 0, 1, 2, 3, 4, 0, 2, 3, 1, 4};
+    const int ptrB[] = {0, 3, 5, 8, 11, 13};
+    const int inds[] = {0, 1, 4};
+    const TypeParam values_clipped[] = {1., -1., -2., 5., 4., -4., 8., -5.};
+    const int columns_clipped[] = {0, 1, 0, 1, 2, 0, 1, 2};
+    const int ptrB_clipped[] = {0, 2, 4, 5, 6, 8};
+    this->csr_wrapper_->set_values(values);
+    this->csr_wrapper_->set_columns(columns);
+    this->csr_wrapper_->set_ptrB(ptrB);
+    shared_ptr<CSRWrapper<TypeParam> > clipped = this->csr_wrapper_->clip_columns_gpu(3, inds);
+    ASSERT_EQ(clipped->nnz(), 8);
+    for (int i = 0; i < 8; ++i) {
+        EXPECT_EQ(clipped->cpu_values()[i], values_clipped[i]) << i << "th value does not match.";
+        EXPECT_EQ(clipped->cpu_columns()[i], columns_clipped[i]) << i << "th column does not match.";
+    }
+    for (int i = 0; i < 6; ++i) {
+        EXPECT_EQ(clipped->cpu_ptrB()[i], ptrB_clipped[i]);
+    }
+}
+
 template <typename Dtype>
 class CSRWrapperTransposeTest : public GPUDeviceTest<Dtype> {
 protected:
