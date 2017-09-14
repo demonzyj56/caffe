@@ -19,6 +19,28 @@ template <typename Dtype>
 void make_conv_dict_gpu(const int n, const int m, const Dtype *Dl, const int N, 
     CSCParameter::Boundary boundary, Dtype *values, int *columns, int *ptrB);
 
+inline std::string cusolverGetErrorString(cusolverStatus_t status) {
+    switch (status) {
+        case CUSOLVER_STATUS_SUCCESS:
+            return "cusolver status success";
+        case CUSOLVER_STATUS_NOT_INITIALIZED:
+            return "cusolver status not initialized";
+        case CUSOLVER_STATUS_ALLOC_FAILED:
+            return "cusolver status alloc failed";
+        case CUSOLVER_STATUS_INVALID_VALUE:
+            return "cusolver status invalid value";
+        case CUSOLVER_STATUS_ARCH_MISMATCH:
+            return "cusolver status arch mismatch";
+        case CUSOLVER_STATUS_EXECUTION_FAILED:
+            return "cusolver status execution failed";
+        case CUSOLVER_STATUS_INTERNAL_ERROR:
+            return "cusolver status internal error";
+        case CUSOLVER_STATUS_MATRIX_TYPE_NOT_SUPPORTED:
+            return "cusolver status matrix type not supported";
+        default:
+            return "Unknown cusolver error type.";
+    }
+}
 
 #define CUSPARSE_CHECK(condition) do{ \
     cusparseStatus_t status = condition; \
@@ -29,7 +51,7 @@ void make_conv_dict_gpu(const int n, const int m, const Dtype *Dl, const int N,
 #define CUSOLVER_CHECK(condition) do{ \
     cusolverStatus_t status = condition; \
     CHECK_EQ(status, CUSOLVER_STATUS_SUCCESS) \
-        << "cusolver fail!"; \
+        << cusolverGetErrorString(status); \
 } while(0)
 
 /*
@@ -183,6 +205,7 @@ private:
     Dtype lambda2_;
     shared_ptr<CSRWrapper<Dtype> > D_;
     shared_ptr<CSRWrapper<Dtype> > DtDpl2I_;
+    bool debug_;
 
     DISABLE_COPY_AND_ASSIGN(ConvDictWrapper);
 

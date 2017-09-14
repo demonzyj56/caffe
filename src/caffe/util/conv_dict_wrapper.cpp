@@ -323,7 +323,7 @@ ConvDictWrapper<Dtype>::ConvDictWrapper(cusparseHandle_t *handle, const Blob<Dty
     : handle_(handle), dnsolver_handle_(NULL), spsolver_handle_(NULL), n_(Dl->shape(0)),
     m_(Dl->shape(1)), N_(N), boundary_(boundary), lambda2_(lambda2),
     D_(new CSRWrapper<Dtype>(handle, N_, N_*m_, n_*m_*N_)),
-    DtDpl2I_() {
+    DtDpl2I_(), debug_(false) {
     CHECK_EQ(boundary_, CSCParameter::CIRCULANT_BACK)
         << "Only circulant back boundary condtion is currently supported!";
     make_conv_dict_gpu(n_, m_, Dl->gpu_data(), N_, boundary_,
@@ -380,7 +380,8 @@ void ConvDictWrapper<float>::create() {
     if (NULL != nnzTotalDevHostPtr) {
         CHECK_EQ(*nnzTotalDevHostPtr, nnz) << "Different values of nonzero!";
     }
-    LOG(INFO) << "Nonzeros: " << nnz << ", sparsity: " << float(nnz)/DtDpl2I_->row()/DtDpl2I_->col();
+    LOG_IF(INFO, debug_) << "Nonzeros: " << nnz
+        << ", sparsity: " << float(nnz)/DtDpl2I_->row()/DtDpl2I_->col();
     CHECK_GE(nnz, 0) << "An overflow of int32 value is suspected. "
         << "Sadly there is noting we could do.  Dying...";
     DtDpl2I_->set_nnz(nnz);
@@ -495,7 +496,8 @@ shared_ptr<CSRWrapper<float> > ConvDictWrapper<float>::create_clipped(int nind, 
     if (NULL != nnzTotalDevHostPtr) {
         CHECK_EQ(*nnzTotalDevHostPtr, nnz) << "Different values of nonzero!";
     }
-    LOG(INFO) << "LHS matrix nonzeros: " << nnz << ", sparsity: " << float(nnz)/lhs->row()/lhs->col();
+    LOG_IF(INFO, debug_) << "LHS matrix nonzeros: " << nnz
+        << ", sparsity: " << float(nnz)/lhs->row()/lhs->col();
     CHECK_GE(nnz, 0) << "An overflow of int32 value is suspected. "
         << "Sadly there is noting we could do.  Dying...";
     lhs->set_nnz(nnz);
@@ -554,7 +556,8 @@ shared_ptr<CSRWrapper<double> > ConvDictWrapper<double>::create_clipped(int nind
     if (NULL != nnzTotalDevHostPtr) {
         CHECK_EQ(*nnzTotalDevHostPtr, nnz) << "Different values of nonzero!";
     }
-    LOG(INFO) << "LHS matrix nonzeros: " << nnz << ", sparsity: " << double(nnz)/lhs->row()/lhs->col();
+    LOG_IF(INFO, debug_) << "LHS matrix nonzeros: " << nnz
+        << ", sparsity: " << double(nnz)/lhs->row()/lhs->col();
     CHECK_GE(nnz, 0) << "An overflow of int32 value is suspected. "
         << "Sadly there is noting we could do.  Dying...";
     lhs->set_nnz(nnz);
@@ -578,11 +581,11 @@ void ConvDictWrapper<float>::solve(int nnz, const int *h_inds, float *d_x) {
     shared_ptr<CSRWrapper<float> > clipped;
     if (NULL != DtDpl2I_) {
         clipped = DtDpl2I_->clip(nnz, h_inds);
-        LOG(INFO) << "Using precomputed matrix to solve.";
+        LOG_IF(INFO, debug_) << "Using precomputed matrix to solve.";
     } else {
         clipped = create_clipped(nnz, h_inds);
     }
-    LOG(INFO) << "Clip time: " << timer.Seconds() << "s.";
+    LOG_IF(INFO, debug_) << "Clip time: " << timer.Seconds() << "s.";
     timer.Start();
     float tol = 1e-12;
     int reorder = 0;
@@ -590,7 +593,7 @@ void ConvDictWrapper<float>::solve(int nnz, const int *h_inds, float *d_x) {
     CUSOLVER_CHECK(cusolverSpScsrlsvchol(spsolver_handle_, clipped->row(), clipped->nnz(),
         clipped->descr(), clipped->values(), clipped->ptrB(), clipped->columns(),
         d_x, tol, reorder, d_x, &singularity));
-    LOG(INFO) << "Actual solving time: " << timer.Seconds() << "s.";
+    LOG_IF(INFO, debug_) << "Actual solving time: " << timer.Seconds() << "s.";
     CHECK_EQ(singularity, -1) << "Singularity value is " << singularity;
 }
 
@@ -601,11 +604,11 @@ void ConvDictWrapper<double>::solve(int nnz, const int *h_inds, double *d_x) {
     shared_ptr<CSRWrapper<double> > clipped;
     if (NULL != DtDpl2I_) {
         clipped = DtDpl2I_->clip(nnz, h_inds);
-        LOG(INFO) << "Using precomputed matrix to solve.";
+        LOG_IF(INFO, debug_) << "Using precomputed matrix to solve.";
     } else {
         clipped = create_clipped(nnz, h_inds);
     }
-    LOG(INFO) << "Clip time: " << timer.Seconds() << "s.";
+    LOG_IF(INFO, debug_) << "Clip time: " << timer.Seconds() << "s.";
     timer.Start();
     double tol = 1e-12;
     int reorder = 0;
@@ -613,7 +616,7 @@ void ConvDictWrapper<double>::solve(int nnz, const int *h_inds, double *d_x) {
     CUSOLVER_CHECK(cusolverSpDcsrlsvchol(spsolver_handle_, clipped->row(), clipped->nnz(),
         clipped->descr(), clipped->values(), clipped->ptrB(), clipped->columns(),
         d_x, tol, reorder, d_x, &singularity));
-    LOG(INFO) << "Actual solving time: " << timer.Seconds() << "s.";
+    LOG_IF(INFO, debug_) << "Actual solving time: " << timer.Seconds() << "s.";
     CHECK_EQ(singularity, -1) << "Singularity value is " << singularity;
 }
 

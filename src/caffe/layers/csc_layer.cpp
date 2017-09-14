@@ -519,7 +519,6 @@ void CSCLayer<Dtype>::csc_inverse_(const Blob<Dtype> *top, Blob<Dtype> *beta) {
     int N = top->shape(2)*top->shape(3);
     SyncedMemory buffer(N*m*sizeof(Dtype));
     for (int n = 0; n < top->shape(0); ++n) {
-        LOG_IF(INFO, verbose_) << "Working on " << n+1 << "/" << top->shape(0) << " samples";
         vector<int> indices;
         Dtype *buffer_ptr = (Dtype *)buffer.mutable_cpu_data();
         for (int i = 0; i < N*m; ++i) {
@@ -532,14 +531,15 @@ void CSCLayer<Dtype>::csc_inverse_(const Blob<Dtype> *top, Blob<Dtype> *beta) {
                 indices.push_back(i);
             }
         }
-        LOG_IF(INFO, verbose_) << "RHS Nonzeros: " << indices.size()
-            << ", sparsity: " << float(indices.size())/N/m;
-        LOG_IF(INFO, verbose_) << "Solving for beta...";
         CPUTimer timer;
         timer.Start();
         // buffer is synced automatically
         conv_dict.solve(indices.size(), indices.data(), (Dtype *)buffer.mutable_gpu_data());
-        LOG_IF(INFO, verbose_) << "Done solving in " << timer.Seconds() << "s.";
+        LOG_IF(INFO, verbose_) 
+            << "(" << n+1 << "/" << top->shape(0) << ") "
+            << "Nonzeros: " << indices.size()
+            << ", sparsity: " << float(indices.size())/N/m
+            << ", time: " << timer.Seconds() << "s.";
         buffer_ptr = (Dtype *)buffer.mutable_cpu_data();
         for (int j = 0; j < indices.size(); ++j) {
             int ind = indices[j];
