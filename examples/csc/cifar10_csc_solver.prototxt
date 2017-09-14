@@ -24,8 +24,8 @@ display: 20
 # The maximum number of iterations: 100 epochs for cifar10
 max_iter: 2000
 # snapshot intermediate results
-snapshot_prefix: "examples/csc/csc_cifar10_lr1"
-snapshot: 1000
+snapshot_prefix: "examples/csc/csc_cifar10"
+# snapshot: 1000
 # solver mode: CPU or GPU
 solver_mode: GPU
 # debug_info: true

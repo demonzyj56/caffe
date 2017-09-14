@@ -10,5 +10,5 @@ echo Logging output to "$LOG"
 
 ./build/tools/caffe train \
     -solver examples/csc/cifar10_csc_solver.prototxt \
-    -gpu 0,1,2,3 \
+    -gpu 1 \
     $@

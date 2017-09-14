@@ -13,7 +13,7 @@ layer {
   }
   data_param {
     source: "examples/cifar10/cifar10_train_lmdb"
-    batch_size: 25
+    batch_size: 100
     backend: LMDB
   }
 }
@@ -43,15 +43,16 @@ layer {
   csc_param {
     kernel_h: 5
     kernel_w: 5
-    num_output: 200
+    num_output: 100
     admm_max_iter: 1000
     admm_eta: 1.1
-    lambda1: 0.01
+    lambda1: 0.1
     lambda2: 1.
     filler {
         type: "xavier"
     }
-    boundary: PAD_BOTH
+    boundary: CIRCULANT_BACK
+    verbose: true
   }
   param {
     lr_mult: 1
