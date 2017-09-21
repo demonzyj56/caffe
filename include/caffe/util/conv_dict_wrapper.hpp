@@ -19,6 +19,15 @@ template <typename Dtype>
 void make_conv_dict_gpu(const int n, const int m, const Dtype *Dl, const int N, 
     CSCParameter::Boundary boundary, Dtype *values, int *columns, int *ptrB);
 
+template <typename Dtype>
+void make_transposed_conv_dict_cpu(int n, int m, const Dtype *Dl, int channels, int height, int width,
+        int kernel_h, int kernel_w, CSCParameter::Boundary boundary, Dtype *values, int *columns,
+        int *ptrB);
+template <typename Dtype>
+void make_transposed_conv_dict_gpu(int n, int m, const Dtype *Dl, int channels, int height, int width,
+        int kernel_h, int kernel_w, CSCParameter::Boundary boundary, Dtype *values, int *columns,
+        int *ptrB);
+
 inline std::string cusolverGetErrorString(cusolverStatus_t status) {
     switch (status) {
         case CUSOLVER_STATUS_SUCCESS:
@@ -137,6 +146,11 @@ public:
         return clip_columns_gpu_(nnz, (const int *)d_inds.gpu_data());
     }
     bool symmetric();
+    // sort the values and columns inplace
+    void sort();
+    // Typically we put a negative integer at invalid entries in columns().
+    // Prune all invalid entries and adjust nnz.
+    void prune();
 
 protected:
     // Impl on device side.  Note the indices value is also on device side.
@@ -169,6 +183,9 @@ public:
         CSCParameter::Boundary boundary, Dtype lambda2);
 
     ~ConvDictWrapper();
+
+    // Create D_, only GPU version is available.
+    // void make_conv_dict(int channels, int height, int width, int kernel_h, int kernel_w);
 
     // solve (D^tD + lambda2*I)beta = x.
     // The index should be on host side while the output is on device side.

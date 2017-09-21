@@ -378,6 +378,48 @@ TYPED_TEST(CSRWrapperTest, TestClipColumnsGpu) {
     }
 }
 
+TYPED_TEST(CSRWrapperTest, TestSort) {
+    const TypeParam values[] = {1., -1., -3., -2., 5., 4., 6., 4., -4., 2., 7., 8., -5.};
+    const int columns[] = {0, 1, 3, 0, 1, 2, 3, 4, 0, 2, 3, 1, 4};
+    const int ptrB[] = {0, 3, 5, 8, 11, 13};
+    const unsigned perm[] = {2, 1, 0, 3, 4, 7, 5, 6, 8, 10, 9, 12, 11};
+    TypeParam values_perm[13];
+    int columns_perm[13];
+    for (int i = 0; i < 13; ++i) {
+        values_perm[i] = values[perm[i]];
+        columns_perm[i] = columns[perm[i]];
+    }
+    this->csr_wrapper_->set_values(values_perm);
+    this->csr_wrapper_->set_columns(columns_perm);
+    this->csr_wrapper_->set_ptrB(ptrB);
+    this->csr_wrapper_->sort();
+    for (int i = 0; i < this->csr_wrapper_->nnz(); ++i) {
+        EXPECT_EQ(this->csr_wrapper_->cpu_values()[i], values[i]);
+        EXPECT_EQ(this->csr_wrapper_->cpu_columns()[i], columns[i]);
+    }
+}
+
+TYPED_TEST(CSRWrapperTest, TestPrune) {
+    const TypeParam values[] = {1., -1., -3., -2., 5., 4., 6., 4., -4., 2., 7., 8., -5.};
+    const int columns[] = {0, -1, 3, 0, -1, -2, 3, 4, 0, 2, 3, 1, -4};
+    const int ptrB[] = {0, 3, 5, 8, 11, 13};
+    const TypeParam values_gt[] = {1., -3., -2., 6., 4., -4., 2., 7., 8.};
+    const int columns_gt[] = {0, 3, 0, 3, 4, 0, 2, 3, 1};
+    const int ptrB_gt[] = {0, 2, 3, 5, 8, 9};
+    this->csr_wrapper_->set_values(values);
+    this->csr_wrapper_->set_columns(columns);
+    this->csr_wrapper_->set_ptrB(ptrB);
+    this->csr_wrapper_->prune();
+    ASSERT_EQ(this->csr_wrapper_->nnz(), 9);
+    for (int i = 0; i < 9; ++i) {
+        EXPECT_EQ(this->csr_wrapper_->cpu_values()[i], values_gt[i]) << i << "th value does not match.";
+        EXPECT_EQ(this->csr_wrapper_->cpu_columns()[i], columns_gt[i]) << i << "th column does not match.";
+    }
+    for (int i = 0; i < 6; ++i) {
+        EXPECT_EQ(this->csr_wrapper_->cpu_ptrB()[i], ptrB_gt[i]);
+    }
+}
+
 template <typename Dtype>
 class CSRWrapperTransposeTest : public GPUDeviceTest<Dtype> {
 protected:

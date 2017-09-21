@@ -8,6 +8,7 @@
 #include "thrust/device_ptr.h"
 #include "thrust/functional.h"
 #include "thrust/equal.h"
+#include "thrust/remove.h"
 
 namespace caffe {
 template <typename Dtype>
@@ -24,7 +25,6 @@ __global__ void set_shifted_kernel(const int vec_len, int n, int m, const Dtype 
     }
 }
 
-template <typename Dtype>
 __global__ void index_shifted_kernel(const int vec_len, int n, int m, int N, int *y) {
     CUDA_KERNEL_LOOP(index, vec_len) {
         int i = index / (n*m);
@@ -36,8 +36,6 @@ __global__ void index_shifted_kernel(const int vec_len, int n, int m, int N, int
     }
 }
 
-
-template <typename Dtype>
 __global__ void index_inc_kernel(const int vec_len, const int inc, int *y) {
     CUDA_KERNEL_LOOP(index, vec_len) {
         y[index] = index * inc;
@@ -55,10 +53,89 @@ void make_conv_dict_gpu(const int n, const int m, const Dtype *d_Dl, const int N
         << "Only circulant back boundary is supported!";
     set_shifted_kernel<Dtype><<<CAFFE_GET_BLOCKS(N*m*n), CAFFE_CUDA_NUM_THREADS>>>(
         N*m*n, n, m, d_Dl, d_values);
-    index_shifted_kernel<Dtype><<<CAFFE_GET_BLOCKS(N*m*n), CAFFE_CUDA_NUM_THREADS>>>(
+    index_shifted_kernel<<<CAFFE_GET_BLOCKS(N*m*n), CAFFE_CUDA_NUM_THREADS>>>(
         N*m*n, n, m, N, d_columns);
-    index_inc_kernel<Dtype><<<CAFFE_GET_BLOCKS(N+1), CAFFE_CUDA_NUM_THREADS>>>(
+    index_inc_kernel<<<CAFFE_GET_BLOCKS(N+1), CAFFE_CUDA_NUM_THREADS>>>(
         N+1, n*m, d_ptrB);
+    CUDA_POST_KERNEL_CHECK;
+}
+
+// note the dictionary is transposed
+template <typename Dtype>
+__global__ void copy_dict_kernel(int vec_len, int n, int m, const Dtype *Dl, Dtype *values) {
+    CUDA_KERNEL_LOOP(index, vec_len) {
+        int ind = index % (n*m);
+        int row = ind % n;
+        int col = ind / n;
+        values[index] = Dl[row * m + col];
+    }
+}
+
+// view from original D, or in CSC format
+__global__ void patches_column_circulant_kernel(int vec_len, int m, int channels, int height, int width,
+        int kernel_h, int kernel_w, int pad_h, int pad_w, int *columns) {
+    // CUDA_KERNEL_LOOP(index, vec_len) {
+    //     // h_index = (c * height + h_offset) * width + w_offset
+    //     // w_index = (h * width + w) * m + mm
+    //     int h_index = index % n;
+    //     int w_index = index / n;
+    // }
+}
+
+template <typename Dtype>
+void make_transposed_conv_dict_circulant_gpu(int n, int m, const Dtype *Dl, int channels, int height, int width,
+        int kernel_h, int kernel_w, int pad_h, int pad_w, Dtype *values, int *columns, int *ptrB) {
+    CHECK_EQ(n, channels * kernel_h * kernel_w);
+    int nnz = n * m * height * width;
+    int col = m * height * width;
+    copy_dict_kernel<Dtype><<<CAFFE_GET_BLOCKS(nnz), CAFFE_CUDA_NUM_THREADS>>>(
+        nnz, n, m, Dl, values);
+    patches_column_circulant_kernel<<<CAFFE_GET_BLOCKS(nnz), CAFFE_CUDA_NUM_THREADS>>>(
+        nnz, m, channels, height, width, kernel_h, kernel_w, pad_h, pad_w, columns);
+    index_inc_kernel<<<CAFFE_GET_BLOCKS(col), CAFFE_CUDA_NUM_THREADS>>>(
+        col, n, ptrB);
+    CUDA_POST_KERNEL_CHECK;
+}
+
+template <typename Dtype>
+void make_transposed_conv_dict_padzeros_gpu(int n, int m, const Dtype *Dl, int channels, int height, int width,
+        int kernel_h, int kernel_w, int pad_h, int pad_w, Dtype *values, int *columns, int *ptrB) {
+    NOT_IMPLEMENTED;
+}
+
+template <typename Dtype>
+void make_transposed_conv_dict_gpu(int n, int m, const Dtype *Dl, int channels, int height, int width,
+        int kernel_h, int kernel_w, CSCParameter::Boundary boundary, Dtype *values, int *columns,
+        int *ptrB) {
+    CHECK_EQ(n, channels * kernel_h * kernel_w);
+    switch(boundary) {
+        case CSCParameter::CIRCULANT_BACK:
+            make_transposed_conv_dict_circulant_gpu(n, m, Dl, channels, height, width, kernel_h, kernel_w, 
+                0, 0, values, columns, ptrB);
+            break;
+        case CSCParameter::CIRCULANT_FRONT:
+            make_transposed_conv_dict_circulant_gpu(n, m, Dl, channels, height, width, kernel_h, kernel_w, 
+                kernel_h-1, kernel_w-1, values, columns, ptrB);
+            break;
+        case CSCParameter::PAD_BACK:
+            make_transposed_conv_dict_padzeros_gpu(n, m, Dl, channels, height, width, kernel_h, kernel_w, 
+                0, 0, values, columns, ptrB);
+            break;
+        case CSCParameter::PAD_FRONT:
+            make_transposed_conv_dict_padzeros_gpu(n, m, Dl, channels, height, width, kernel_h, kernel_w, 
+                kernel_h-1, kernel_w-1, values, columns, ptrB);
+            break;
+        case CSCParameter::PAD_BOTH:
+            CHECK_EQ(kernel_h % 2, 1);
+            CHECK_EQ(kernel_w % 2, 1);
+            make_transposed_conv_dict_padzeros_gpu(n, m, Dl, channels, height, width, kernel_h, kernel_w,
+                (kernel_h-1)/2, (kernel_w-1)/2, values, columns, ptrB);
+            break;
+        case CSCParameter::NOPAD:
+            LOG(FATAL) << "Non padding boundary condition is not supported!";
+        default:
+            NOT_IMPLEMENTED;
+    }
 }
 
 // The creation of identity is in cu file because it requires a iota like kernel.
@@ -67,10 +144,11 @@ CSRWrapper<Dtype> &CSRWrapper<Dtype>::identity() {
     CHECK_EQ(row(), col());
     CHECK_EQ(row(), nnz());
     caffe_gpu_set(nnz(), Dtype(1), mutable_values());
-    index_inc_kernel<Dtype><<<CAFFE_GET_BLOCKS(nnz()), CAFFE_CUDA_NUM_THREADS>>>(
+    index_inc_kernel<<<CAFFE_GET_BLOCKS(nnz()), CAFFE_CUDA_NUM_THREADS>>>(
         nnz(), 1, mutable_columns());
-    index_inc_kernel<Dtype><<<CAFFE_GET_BLOCKS(row()+1), CAFFE_CUDA_NUM_THREADS>>>(
+    index_inc_kernel<<<CAFFE_GET_BLOCKS(row()+1), CAFFE_CUDA_NUM_THREADS>>>(
         row()+1, 1, mutable_ptrB());
+    CUDA_POST_KERNEL_CHECK;
     return *this;
 }
 
@@ -90,6 +168,12 @@ struct InverseIndex {
 struct NonNegative {
     __host__ __device__ bool operator()(int x) {
         return x >= 0;
+    }
+};
+
+struct Negative {
+    __host__ __device__ bool operator()(int x) {
+        return x < 0;
     }
 };
 
@@ -120,16 +204,45 @@ shared_ptr<CSRWrapper<Dtype> > CSRWrapper<Dtype>::clip_columns_gpu_(int nnz, con
     return clipped;
 }
 
+// Perform pruning on GPU side.
+template <typename Dtype>
+void CSRWrapper<Dtype>::prune() {
+    thrust::device_ptr<Dtype> thrust_values = thrust::device_pointer_cast(mutable_values());
+    thrust::device_ptr<int> thrust_columns = thrust::device_pointer_cast(mutable_columns());
+    vector<int> valid_nnz(r_);
+    for (int i = 0; i < r_; ++i) {
+        valid_nnz[i] = thrust::count_if(thrust::device, thrust_columns + cpu_ptrB()[i],
+            thrust_columns + cpu_ptrE()[i], NonNegative());
+    }
+    for (int i = 0; i < r_; ++i) {
+        mutable_cpu_ptrB()[i+1] = cpu_ptrB()[i] + valid_nnz[i];
+    }
+    thrust::device_ptr<Dtype> values_end = thrust::remove_if(thrust_values, thrust_values + nnz_,
+        thrust_columns, Negative());
+    CHECK_EQ(cpu_ptrB()[r_], values_end - thrust_values);
+    thrust::device_ptr<int> columns_end = thrust::remove_if(thrust_columns, thrust_columns + nnz_, Negative());
+    CHECK_EQ(cpu_ptrB()[r_], columns_end - thrust_columns);
+    nnz_ = cpu_ptrB()[r_];
+}
+
 // require instaniation
 template CSRWrapper<float>  &CSRWrapper<float>::identity();
 template CSRWrapper<double> &CSRWrapper<double>::identity();
 template shared_ptr<CSRWrapper<float> > CSRWrapper<float>::clip_columns_gpu_(int nnz, const int *d_inds);
 template shared_ptr<CSRWrapper<double> > CSRWrapper<double>::clip_columns_gpu_(int nnz, const int *d_inds);
+template void CSRWrapper<float>::prune();
+template void CSRWrapper<double>::prune();
 
 template void make_conv_dict_gpu<float>(const int n, const int m, const float *d_Dl, const int N,
     CSCParameter::Boundary boundary, float *d_values, int *d_columns, int *d_ptrB);
 template void make_conv_dict_gpu<double>(const int n, const int m, const double *d_Dl, const int N,
     CSCParameter::Boundary boundary, double *d_values, int *d_columns, int *d_ptrB);
 
+template void make_transposed_conv_dict_gpu<float>(int n, int m, const float *Dl, int channels,
+        int height, int width, int kernel_h, int kernel_w, CSCParameter::Boundary boundary,
+        float *values, int *columns, int *ptrB);
+template void make_transposed_conv_dict_gpu<double>(int n, int m, const double *Dl, int channels,
+        int height, int width, int kernel_h, int kernel_w, CSCParameter::Boundary boundary,
+        double *values, int *columns, int *ptrB);
 
 } // namespace caffe

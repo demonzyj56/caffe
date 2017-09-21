@@ -40,10 +40,130 @@ void make_conv_dict_cpu(const int n, const int m, const Dtype *Dl, const int N,
     }
 }
 
+/*
+ * Creating the circulant dictionary from the local one.
+ * The local dictionary has size of n x m, and the circulant dictionary has size
+ * (channels x height x width) x (height x width x m).
+ * For circulant case, each row/column of D has the same number of elements,
+ * We use a simplified method, namely to create the CSC format of D.  In this case,
+ * ptrB has a length of cxhxw.  However, please note that Dl is still row-major.
+ * nnz = nxNxm.
+ * Note also that the create sparse matrix is unsorted.  On GPU end should call
+ * csrsort to sort the indices.
+ * */
+template <typename Dtype>
+void make_transposed_conv_dict_circulant_cpu(int n, int m, const Dtype *Dl, int channels, int height, int width,
+        int kernel_h, int kernel_w, int pad_h, int pad_w, Dtype *values, int *columns,
+        int *ptrB) {
+    for (int h = 0; h < height; ++h) {
+        for (int w = 0; w < width; ++w) {
+            caffe_copy(n*m, Dl, values);
+            values += n*m;
+            for (int mm = 0; mm < m; ++mm) {
+                for (int c = 0; c < channels; ++c) {
+                    for (int kh = 0; kh < kernel_h; ++kh) {
+                        int h_offset = (h + kh - pad_h + height) % height;
+                        for (int kw = 0; kw < kernel_w; ++kw) {
+                            int w_offset = (w + kw - pad_w + width) % width;
+                            int Dl_row = (c * kernel_h + kh) * kernel_w + kw;
+                            *values = Dl[Dl_row * m + mm];
+                            *columns = (c * height + h_offset) * width + w_offset;
+                            values++;
+                            columns++;
+                        }
+                    }
+                }
+            }
+        }
+    }
+    for (int i = 0; i < m * height * width; ++i) {
+        ptrB[i] = i * n;
+    }
+}
+
+template <typename Dtype>
+void make_transposed_conv_dict_padzeros_cpu(int n, int m, const Dtype *Dl, int channels, int height, int width,
+        int kernel_h, int kernel_w, int pad_h, int pad_w, Dtype *values, int *columns, int *ptrB) {
+    for (int h = 0; h < height; ++h) {
+        for (int w = 0; w < width; ++w) {
+            // caffe_copy(n*m, Dl, values);
+            // values += n*m;
+            for (int mm = 0; mm < m; ++mm) {
+                for (int c = 0; c < channels; ++c) {
+                    for (int kh = 0; kh < kernel_h; ++kh) {
+                        int h_offset = h + kh - pad_h;
+                        for (int kw = 0; kw < kernel_w; ++kw) {
+                            int w_offset = w + kw - pad_w;
+                            if (h_offset >= 0 && h_offset < height && w_offset >= 0 && w_offset < width) {
+                                *columns = (c * height + h_offset) * width + w_offset;
+                                int Dl_row = (c * kernel_h + kh) * kernel_w + kw;
+                                *values = Dl[Dl_row * m + mm];
+                            } else {
+                                *columns = -1;
+                                *values = Dtype(0);
+                            }
+                            values++;
+                            columns++;
+                        }
+                    }
+                }
+            }
+        }
+    }
+    for (int i = 0; i < m * height * width; ++i) {
+        ptrB[i] = i * n;
+    }
+}
+
+// dispatch
+// Since we don't know exactly the nnz in values/columns, we create the memory of size
+// channels*kernel_h*kernel_w*m*height*width, where the invalid entries in columns is -1.
+template <typename Dtype>
+void make_transposed_conv_dict_cpu(int n, int m, const Dtype *Dl, int channels, int height, int width,
+        int kernel_h, int kernel_w, CSCParameter::Boundary boundary, Dtype *values, int *columns,
+        int *ptrB) {
+    CHECK_EQ(n, channels * kernel_h * kernel_w);
+    switch(boundary) {
+        case CSCParameter::CIRCULANT_BACK:
+            make_transposed_conv_dict_circulant_cpu(n, m, Dl, channels, height, width, kernel_h, kernel_w, 
+                0, 0, values, columns, ptrB);
+            break;
+        case CSCParameter::CIRCULANT_FRONT:
+            make_transposed_conv_dict_circulant_cpu(n, m, Dl, channels, height, width, kernel_h, kernel_w, 
+                kernel_h-1, kernel_w-1, values, columns, ptrB);
+            break;
+        case CSCParameter::PAD_BACK:
+            make_transposed_conv_dict_padzeros_cpu(n, m, Dl, channels, height, width, kernel_h, kernel_w, 
+                0, 0, values, columns, ptrB);
+            break;
+        case CSCParameter::PAD_FRONT:
+            make_transposed_conv_dict_padzeros_cpu(n, m, Dl, channels, height, width, kernel_h, kernel_w, 
+                kernel_h-1, kernel_w-1, values, columns, ptrB);
+            break;
+        case CSCParameter::PAD_BOTH:
+            CHECK_EQ(kernel_h % 2, 1);
+            CHECK_EQ(kernel_w % 2, 1);
+            make_transposed_conv_dict_padzeros_cpu(n, m, Dl, channels, height, width, kernel_h, kernel_w,
+                (kernel_h-1)/2, (kernel_w-1)/2, values, columns, ptrB);
+            break;
+        case CSCParameter::NOPAD:
+            LOG(FATAL) << "Non padding boundary condition is not supported!";
+        default:
+            NOT_IMPLEMENTED;
+    }
+}
+
 template void make_conv_dict_cpu<float>(const int n, const int m, const float *Dl, const int N,
     CSCParameter::Boundary boundary, float *values, int *columns, int *ptrB);
 template void make_conv_dict_cpu<double>(const int n, const int m, const double *Dl, const int N,
     CSCParameter::Boundary boundary, double *values, int *columns, int *ptrB);
+
+template void make_transposed_conv_dict_cpu<float>(int n, int m, const float *Dl, int channels, int height,
+    int width, int kernel_h, int kernel_w, CSCParameter::Boundary boundary, float *values, int *columns,
+    int *ptrB);
+template void make_transposed_conv_dict_cpu<double>(int n, int m, const double *Dl, int channels, int height,
+    int width, int kernel_h, int kernel_w, CSCParameter::Boundary boundary, double *values, int *columns,
+    int *ptrB);
 
 template <typename Dtype>
 CSRWrapper<Dtype>::CSRWrapper(cusparseHandle_t *handle, int r, int c, int nnz)
@@ -315,6 +435,42 @@ bool CSRWrapper<Dtype>::symmetric() {
         cpu_ptrB(), cpu_ptrE(), cpu_columns(), &issym));
     CUSOLVER_CHECK(cusolverSpDestroy(handle));
     return static_cast<bool>(issym);
+}
+
+template <>
+void CSRWrapper<float>::sort() {
+    size_t pBufferSizeInBytes = 0;
+    CUSPARSE_CHECK(cusparseXcsrsort_bufferSizeExt(*handle_, row(), col(), nnz(), ptrB(),
+        columns(), &pBufferSizeInBytes));
+    SyncedMemory pBuffer(pBufferSizeInBytes);
+    SyncedMemory P(sizeof(int)*nnz());
+    SyncedMemory valBuffer(sizeof(float)*nnz());
+    CUSPARSE_CHECK(cusparseCreateIdentityPermutation(*handle_, nnz(),
+        (int *)P.mutable_gpu_data()));
+    CUSPARSE_CHECK(cusparseXcsrsort(*handle_, row(), col(), nnz(), descr(), ptrB(), mutable_columns(),
+        (int *)P.mutable_gpu_data(), pBuffer.mutable_gpu_data()));
+    CUSPARSE_CHECK(cusparseSgthr(*handle_, nnz(), mutable_values(),
+        (float *)valBuffer.mutable_gpu_data(), (const int *)P.gpu_data(),
+        cusparseGetMatIndexBase(descr())));
+    caffe_copy(nnz(), (const float *)valBuffer.gpu_data(), mutable_values());
+}
+
+template <>
+void CSRWrapper<double>::sort() {
+    size_t pBufferSizeInBytes = 0;
+    CUSPARSE_CHECK(cusparseXcsrsort_bufferSizeExt(*handle_, row(), col(), nnz(), ptrB(),
+        columns(), &pBufferSizeInBytes));
+    SyncedMemory pBuffer(pBufferSizeInBytes);
+    SyncedMemory P(sizeof(int)*nnz());
+    SyncedMemory valBuffer(sizeof(double)*nnz());
+    CUSPARSE_CHECK(cusparseCreateIdentityPermutation(*handle_, nnz(),
+        (int *)P.mutable_gpu_data()));
+    CUSPARSE_CHECK(cusparseXcsrsort(*handle_, row(), col(), nnz(), descr(), ptrB(), mutable_columns(),
+        (int *)P.mutable_gpu_data(), pBuffer.mutable_gpu_data()));
+    CUSPARSE_CHECK(cusparseDgthr(*handle_, nnz(), mutable_values(),
+        (double *)valBuffer.mutable_gpu_data(), (const int *)P.gpu_data(),
+        cusparseGetMatIndexBase(descr())));
+    caffe_copy(nnz(), (const double *)valBuffer.gpu_data(), mutable_values());
 }
 
 template <typename Dtype>
