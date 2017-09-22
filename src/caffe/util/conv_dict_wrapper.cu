@@ -72,14 +72,27 @@ __global__ void copy_dict_kernel(int vec_len, int n, int m, const Dtype *Dl, Dty
 }
 
 // view from original D, or in CSC format
-__global__ void patches_column_circulant_kernel(int vec_len, int m, int channels, int height, int width,
-        int kernel_h, int kernel_w, int pad_h, int pad_w, int *columns) {
-    // CUDA_KERNEL_LOOP(index, vec_len) {
-    //     // h_index = (c * height + h_offset) * width + w_offset
-    //     // w_index = (h * width + w) * m + mm
-    //     int h_index = index % n;
-    //     int w_index = index / n;
-    // }
+// Launch one kernel per patch of size kernel_h x kernel_w.
+// vec_len is now height x width x m x channels.
+// index = ((h * width + w) * m + mm) * channels + c
+__global__ void patches_column_circulant_kernel(int vec_len, int m, int channels, int height,
+        int width, int kernel_h, int kernel_w, int pad_h, int pad_w, int *columns) {
+    CUDA_KERNEL_LOOP(index, vec_len) {
+        int *local_columns = columns + index * kernel_h * kernel_w;
+        int w_index = index / channels;
+        int c = index % channels;
+        int patch_index = w_index / m;
+        /* int mm = w_index % m; */
+        int h = patch_index / width;
+        int w = patch_index % width;
+        for (int kh = 0; kh < kernel_h; ++kh) {
+            int h_offset = (h + kh - pad_h + height) % height;
+            for (int kw = 0; kw < kernel_w; ++kw) {
+                int w_offset = (w + kw - pad_w + width) % width;
+                *local_columns++ = (c * height + h_offset) * width + w_offset;
+            }
+        }
+    }
 }
 
 template <typename Dtype>
@@ -90,8 +103,8 @@ void make_transposed_conv_dict_circulant_gpu(int n, int m, const Dtype *Dl, int 
     int col = m * height * width;
     copy_dict_kernel<Dtype><<<CAFFE_GET_BLOCKS(nnz), CAFFE_CUDA_NUM_THREADS>>>(
         nnz, n, m, Dl, values);
-    patches_column_circulant_kernel<<<CAFFE_GET_BLOCKS(nnz), CAFFE_CUDA_NUM_THREADS>>>(
-        nnz, m, channels, height, width, kernel_h, kernel_w, pad_h, pad_w, columns);
+    patches_column_circulant_kernel<<<CAFFE_GET_BLOCKS(col*channels), CAFFE_CUDA_NUM_THREADS>>>(
+        col*channels, m, channels, height, width, kernel_h, kernel_w, pad_h, pad_w, columns);
     index_inc_kernel<<<CAFFE_GET_BLOCKS(col), CAFFE_CUDA_NUM_THREADS>>>(
         col, n, ptrB);
     CUDA_POST_KERNEL_CHECK;
