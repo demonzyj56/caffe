@@ -475,6 +475,7 @@ ConvDictWrapper<Dtype>::ConvDictWrapper(cusparseHandle_t *handle, const Blob<Dty
     m_(Dl->shape(1)), N_(N), boundary_(boundary), lambda2_(lambda2),
     D_(new CSRWrapper<Dtype>(handle, N_, N_*m_, n_*m_*N_)),
     DtDpl2I_(), debug_(false) {
+    LOG(WARNING) << "Deprecated. Use the correct interface.";
     CHECK_EQ(boundary_, CSCParameter::CIRCULANT_BACK)
         << "Only circulant back boundary condtion is currently supported!";
     make_conv_dict_gpu(n_, m_, Dl->gpu_data(), N_, boundary_,
@@ -484,9 +485,39 @@ ConvDictWrapper<Dtype>::ConvDictWrapper(cusparseHandle_t *handle, const Blob<Dty
 }
 
 template <typename Dtype>
+ConvDictWrapper<Dtype>::ConvDictWrapper(cusparseHandle_t *handle, const Blob<Dtype> *Dl, int channels,
+        int height, int width, int kernel_h, int kernel_w, CSCParameter::Boundary boundary,
+        Dtype lambda2)
+        : handle_(handle), dnsolver_handle_(NULL), spsolver_handle_(NULL), n_(Dl->shape(0)),
+        m_(Dl->shape(1)), N_(-1), boundary_(boundary), lambda2_(lambda2),
+        D_(), DtDpl2I_(), debug_(false), channels_(channels), height_(height), width_(width),
+        kernel_h_(kernel_h), kernel_w_(kernel_w) {
+    CHECK_EQ(n_, channels_ * kernel_h_ * kernel_w_);
+    CUSOLVER_CHECK(cusolverSpCreate(&spsolver_handle_));
+    CUSOLVER_CHECK(cusolverDnCreate(&dnsolver_handle_));
+    this->make_conv_dict(Dl);
+    CHECK(D_);
+}
+
+template <typename Dtype>
 ConvDictWrapper<Dtype>::~ConvDictWrapper() {
     CUSOLVER_CHECK(cusolverSpDestroy(spsolver_handle_));
     CUSOLVER_CHECK(cusolverDnDestroy(dnsolver_handle_));
+}
+
+// Split into three steps:
+// 1. create the transposed and unpruned version of D_.
+// 2. prune (in place).
+// 3. transpose (out of place).
+template <typename Dtype>
+void ConvDictWrapper<Dtype>::make_conv_dict(const Blob<Dtype> *Dl) {
+    CHECK_EQ(Dl->shape(0), n_);
+    CHECK_EQ(Dl->shape(1), m_);
+    CSRWrapper<Dtype> Dtrans(handle_, m_*height_*width_, channels_*height_*width_, n_*m_*height_*width_);
+    make_transposed_conv_dict_gpu(n_, m_, Dl->gpu_data(), channels_, height_, width_, kernel_h_, kernel_w_,
+        boundary_, Dtrans.mutable_values(), Dtrans.mutable_columns(), Dtrans.mutable_ptrB());
+    Dtrans.prune();
+    D_ = Dtrans.transpose();
 }
 
 template <>

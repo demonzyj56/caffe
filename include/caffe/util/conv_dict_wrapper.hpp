@@ -182,10 +182,14 @@ public:
     explicit ConvDictWrapper(cusparseHandle_t *handle, const Blob<Dtype> *Dl, int N,
         CSCParameter::Boundary boundary, Dtype lambda2);
 
+    explicit ConvDictWrapper(cusparseHandle_t *handle, const Blob<Dtype> *Dl, int channels,
+        int height, int width, int kernel_h, int kernel_w, CSCParameter::Boundary boundary,
+        Dtype lambda2);
+
     ~ConvDictWrapper();
 
-    // Create D_, only GPU version is available.
-    // void make_conv_dict(int channels, int height, int width, int kernel_h, int kernel_w);
+    // create D_, using GPU routines
+    void make_conv_dict(const Blob<Dtype> *Dl);
 
     // solve (D^tD + lambda2*I)beta = x.
     // The index should be on host side while the output is on device side.
@@ -223,6 +227,11 @@ private:
     shared_ptr<CSRWrapper<Dtype> > D_;
     shared_ptr<CSRWrapper<Dtype> > DtDpl2I_;
     bool debug_;
+    int channels_;
+    int height_;
+    int width_;
+    int kernel_h_;
+    int kernel_w_;
 
     DISABLE_COPY_AND_ASSIGN(ConvDictWrapper);
 

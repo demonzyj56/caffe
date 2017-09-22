@@ -735,4 +735,158 @@ TYPED_TEST(ConvDictWrapperTest, TestSolveClipped) {
     this->conv_dict_->analyse(nnz, inds.data());
 }
 
+// A comparison of the wrapped convolutional dictionary generation method with the original prototype.
+// Only cpu version is compared, because the consistency of cpu and gpu version have been tested.
+template <typename Dtype>
+class ConvDictPrototypeTest : public GPUDeviceTest<Dtype> {
+protected:
+    ConvDictPrototypeTest() 
+        : handle_(), n_(18), m_(3), channels_(2), height_(4), width_(5), kernel_h_(3), kernel_w_(3),
+        nnz_(n_*m_*height_*width_), all_boundaries_(), Dl_(new Blob<Dtype>()),
+        prototype_(channels_*height_*width_*m_*height_*width_, 0),
+        wrapped_(new SyncedMemory(sizeof(Dtype)*prototype_.size())) {
+        vector<int> Dl_shape(2);
+        Dl_shape[0] = n_;
+        Dl_shape[1] = m_;
+        Dl_->Reshape(Dl_shape);
+        FillerParameter filler_param;
+        GaussianFiller<Dtype> filler(filler_param);
+        filler.Fill(Dl_);
+        all_boundaries_.push_back(CSCParameter::CIRCULANT_BACK);
+        all_boundaries_.push_back(CSCParameter::CIRCULANT_FRONT);
+        all_boundaries_.push_back(CSCParameter::PAD_FRONT);
+        all_boundaries_.push_back(CSCParameter::PAD_BACK);
+        all_boundaries_.push_back(CSCParameter::PAD_BOTH);
+    }
+
+    ~ConvDictPrototypeTest() {
+        delete Dl_;
+        delete wrapped_;
+    }
+
+    void unroll_dict_circulant(int pad_h, int pad_w) {
+        assert(n_ == kernel_h_ * kernel_w_ * channels_);
+        int D_width_ = m_ * height_ * width_;
+        Dtype *Dl = Dl_->mutable_cpu_data();
+        for (int c = 0; c < channels_; ++c) {
+            Dtype *local_D = prototype_.data() + c * D_width_ * height_ * width_;
+            for (int kh = 0; kh < kernel_h_; ++kh) {
+                for (int kw = 0; kw < kernel_w_; ++kw) {
+                    int Dl_row = (c * kernel_h_ + kh) * kernel_w_ + kw;
+                    for (int h = 0; h < height_; ++h) {
+                        int h_offset = (h + kh - pad_h + height_) % height_;
+                        for (int w = 0; w < width_; ++w) {
+                            int w_offset = (w + kw - pad_w + width_) % width_;
+                            int row = h_offset * width_ + w_offset;
+                            for (int mm = 0; mm < m_; ++mm) {
+                                int col = m_ * (h * width_ + w) + mm;
+                                local_D[row * D_width_ + col] = Dl[Dl_row * m_ + mm];
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    void unroll_dict_padzeros(int pad_h, int pad_w) {
+        assert(n_ == kernel_h_ * kernel_w_ * channels_);
+        int D_width_ = m_ * height_ * width_;
+        Dtype *Dl = Dl_->mutable_cpu_data();
+        for (int c = 0; c < channels_; ++c) {
+            Dtype *local_D = prototype_.data() + c * D_width_ * height_ * width_;
+            for (int kh = 0; kh < kernel_h_; ++kh) {
+                for (int kw = 0; kw < kernel_w_; ++kw) {
+                    int Dl_row = (c * kernel_h_ + kh) * kernel_w_ + kw;
+                    for (int h = 0; h < height_; ++h) {
+                        int h_offset = h + kh - pad_h;
+                        if (h_offset < 0 || h_offset >= height_) {
+                            continue;
+                        }
+                        for (int w = 0; w < width_; ++w) {
+                            int w_offset = w + kw - pad_w;
+                            if (w_offset < 0 || w_offset >= width_) {
+                                continue;
+                            }
+                            int row = h_offset * width_ + w_offset;
+                            for (int mm = 0; mm < m_; ++mm) {
+                                int col = m_ * (h * width_ + w) + mm;
+                                local_D[row * D_width_ + col] = Dl[Dl_row * m_ + mm];
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    void unroll_dict_prototype(CSCParameter::Boundary boundary) {
+        switch(boundary) {
+            case CSCParameter::CIRCULANT_BACK:
+                this->unroll_dict_circulant(0, 0);
+                break;
+            case CSCParameter::CIRCULANT_FRONT:
+                this->unroll_dict_circulant(kernel_h_-1, kernel_w_-1);
+                break;
+            case CSCParameter::PAD_BACK:
+                this->unroll_dict_padzeros(0, 0);
+                break;
+            case CSCParameter::PAD_FRONT:
+                this->unroll_dict_padzeros(kernel_h_-1, kernel_w_-1);
+                break;
+            case CSCParameter::PAD_BOTH:
+                CHECK_EQ(kernel_h_ % 2, 1);
+                CHECK_EQ(kernel_w_ % 2, 1);
+                this->unroll_dict_padzeros((kernel_h_-1)/2, (kernel_w_-1)/2);
+                break;
+            default:
+                LOG(FATAL) << "Unknown boundary condition " << boundary;
+        }
+    }
+
+
+    CusparseHandle handle_;
+    int n_;
+    int m_;
+    int channels_;
+    int height_;
+    int width_;
+    int kernel_h_;
+    int kernel_w_;
+    int nnz_;
+    vector<CSCParameter::Boundary> all_boundaries_;
+    Blob<Dtype>* const Dl_;
+    vector<Dtype> prototype_;
+    SyncedMemory* const wrapped_;
+};
+
+TYPED_TEST_CASE(ConvDictPrototypeTest, TestDtypes);
+
+TYPED_TEST(ConvDictPrototypeTest, TestPrototypeMethodSanity) {
+    for (int k = 0; k < this->all_boundaries_.size(); ++k) {
+        CSCParameter::Boundary b = this->all_boundaries_[k];
+        for (int i = 0; i < this->prototype_.size(); ++i) {
+            this->prototype_[i] = TypeParam(0);
+        }
+        CSRWrapper<TypeParam> trans(this->handle_.get(), this->m_*this->height_*this->width_,
+            this->channels_*this->height_*this->width_, this->nnz_);
+        make_transposed_conv_dict_cpu(this->n_, this->m_, this->Dl_->cpu_data(),
+            this->channels_, this->height_, this->width_, this->kernel_h_, this->kernel_w_, b,
+            (TypeParam *)trans.mutable_cpu_values(),
+            (int *)trans.mutable_cpu_columns(),
+            (int *)trans.mutable_cpu_ptrB());
+        trans.prune();
+        shared_ptr<CSRWrapper<TypeParam> > wrapped = trans.transpose();
+        LOG(INFO) << "wrapped size: " << "row: " << wrapped->row() << " col: " << wrapped->col()
+            << " nnz: " << wrapped->nnz();
+        wrapped->to_dense((TypeParam *)this->wrapped_->mutable_gpu_data()); 
+        this->unroll_dict_prototype(b);
+        for (int i = 0; i < this->prototype_.size(); ++i) {
+            EXPECT_EQ(this->prototype_[i], ((const TypeParam *)this->wrapped_->cpu_data())[i]);
+        }
+    }
+}
+
+
+
 } // namespace caffe
