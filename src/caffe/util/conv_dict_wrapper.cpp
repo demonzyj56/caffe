@@ -58,7 +58,7 @@ void make_transposed_conv_dict_circulant_cpu(int n, int m, const Dtype *Dl, int 
     for (int h = 0; h < height; ++h) {
         for (int w = 0; w < width; ++w) {
             caffe_copy(n*m, Dl, values);
-            values += n*m;
+            // values += n*m;
             for (int mm = 0; mm < m; ++mm) {
                 for (int c = 0; c < channels; ++c) {
                     for (int kh = 0; kh < kernel_h; ++kh) {
@@ -66,17 +66,17 @@ void make_transposed_conv_dict_circulant_cpu(int n, int m, const Dtype *Dl, int 
                         for (int kw = 0; kw < kernel_w; ++kw) {
                             int w_offset = (w + kw - pad_w + width) % width;
                             int Dl_row = (c * kernel_h + kh) * kernel_w + kw;
-                            *values = Dl[Dl_row * m + mm];
-                            *columns = (c * height + h_offset) * width + w_offset;
-                            values++;
-                            columns++;
+                            *values++ = Dl[Dl_row * m + mm];
+                            *columns++ = (c * height + h_offset) * width + w_offset;
+                            // values++;
+                            // columns++;
                         }
                     }
                 }
             }
         }
     }
-    for (int i = 0; i < m * height * width; ++i) {
+    for (int i = 0; i <= m * height * width; ++i) {
         ptrB[i] = i * n;
     }
 }
@@ -86,31 +86,26 @@ void make_transposed_conv_dict_padzeros_cpu(int n, int m, const Dtype *Dl, int c
         int kernel_h, int kernel_w, int pad_h, int pad_w, Dtype *values, int *columns, int *ptrB) {
     for (int h = 0; h < height; ++h) {
         for (int w = 0; w < width; ++w) {
-            // caffe_copy(n*m, Dl, values);
-            // values += n*m;
             for (int mm = 0; mm < m; ++mm) {
                 for (int c = 0; c < channels; ++c) {
                     for (int kh = 0; kh < kernel_h; ++kh) {
                         int h_offset = h + kh - pad_h;
                         for (int kw = 0; kw < kernel_w; ++kw) {
                             int w_offset = w + kw - pad_w;
+                            int Dl_row = (c * kernel_h + kh) * kernel_w + kw;
+                            *values++ = Dl[Dl_row * m + mm];
                             if (h_offset >= 0 && h_offset < height && w_offset >= 0 && w_offset < width) {
-                                *columns = (c * height + h_offset) * width + w_offset;
-                                int Dl_row = (c * kernel_h + kh) * kernel_w + kw;
-                                *values = Dl[Dl_row * m + mm];
+                                *columns++ = (c * height + h_offset) * width + w_offset;
                             } else {
-                                *columns = -1;
-                                *values = Dtype(0);
+                                *columns++ = -1;
                             }
-                            values++;
-                            columns++;
                         }
                     }
                 }
             }
         }
     }
-    for (int i = 0; i < m * height * width; ++i) {
+    for (int i = 0; i <= m * height * width; ++i) {
         ptrB[i] = i * n;
     }
 }
