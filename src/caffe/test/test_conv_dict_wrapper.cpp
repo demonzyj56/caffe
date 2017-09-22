@@ -113,6 +113,115 @@ TYPED_TEST(MakeConvDictTest, TestResultCoincide) {
 }
 
 template <typename Dtype>
+class MakeTransConvDictTest : public GPUDeviceTest<Dtype> {
+protected:
+    MakeTransConvDictTest()
+        : n_(18), m_(3), channels_(2), height_(4), width_(5), kernel_h_(3), kernel_w_(3),
+        nnz_(n_*m_*height_*width_), all_boundaries_(), Dl_(new Blob<Dtype>()),
+        cpu_values_(new SyncedMemory(sizeof(Dtype)*nnz_)),
+        cpu_columns_(new SyncedMemory(sizeof(int)*nnz_)),
+        cpu_ptrB_(new SyncedMemory(sizeof(int)*(m_*height_*width_+1))),
+        gpu_values_(new SyncedMemory(sizeof(Dtype)*nnz_)),
+        gpu_columns_(new SyncedMemory(sizeof(int)*nnz_)),
+        gpu_ptrB_(new SyncedMemory(sizeof(int)*(m_*height_*width_+1))) {
+        vector<int> Dl_shape(2);
+        Dl_shape[0] = n_;
+        Dl_shape[1] = m_;
+        Dl_->Reshape(Dl_shape);
+        FillerParameter filler_param;
+        GaussianFiller<Dtype> filler(filler_param);
+        filler.Fill(Dl_);
+        all_boundaries_.push_back(CSCParameter::CIRCULANT_BACK);
+        all_boundaries_.push_back(CSCParameter::CIRCULANT_FRONT);
+        all_boundaries_.push_back(CSCParameter::PAD_FRONT);
+        all_boundaries_.push_back(CSCParameter::PAD_BACK);
+        all_boundaries_.push_back(CSCParameter::PAD_BOTH);
+    }
+
+    ~MakeTransConvDictTest() {
+        delete Dl_;
+        delete cpu_values_;
+        delete gpu_values_;
+        delete cpu_columns_;
+        delete gpu_columns_;
+        delete cpu_ptrB_;
+        delete gpu_ptrB_;
+    }
+
+
+    int n_;
+    int m_;
+    int channels_;
+    int height_;
+    int width_;
+    int kernel_h_;
+    int kernel_w_;
+    int nnz_;
+    vector<CSCParameter::Boundary> all_boundaries_;
+    Blob<Dtype>* const Dl_;
+    SyncedMemory* const cpu_values_;
+    SyncedMemory* const cpu_columns_;
+    SyncedMemory* const cpu_ptrB_;
+    SyncedMemory* const gpu_values_;
+    SyncedMemory* const gpu_columns_;
+    SyncedMemory* const gpu_ptrB_;
+};
+
+TYPED_TEST_CASE(MakeTransConvDictTest, TestDtypes);
+
+TYPED_TEST(MakeTransConvDictTest, TestCpuRoutineSanity) {
+    for (int i = 0; i < this->all_boundaries_.size(); ++i) {
+        CSCParameter::Boundary b = this->all_boundaries_[i];
+        make_transposed_conv_dict_cpu(this->n_, this->m_, this->Dl_->cpu_data(),
+            this->channels_, this->height_, this->width_, this->kernel_h_, this->kernel_w_, b,
+            (TypeParam *)this->cpu_values_->mutable_cpu_data(),
+            (int *)this->cpu_columns_->mutable_cpu_data(),
+            (int *)this->cpu_ptrB_->mutable_cpu_data());
+    }
+}
+
+TYPED_TEST(MakeTransConvDictTest, TestGpuRoutineSanity) {
+    for (int i = 0; i < this->all_boundaries_.size(); ++i) {
+        CSCParameter::Boundary b = this->all_boundaries_[i];
+        make_transposed_conv_dict_gpu(this->n_, this->m_, this->Dl_->gpu_data(),
+            this->channels_, this->height_, this->width_, this->kernel_h_, this->kernel_w_, b,
+            (TypeParam *)this->gpu_values_->mutable_gpu_data(),
+            (int *)this->gpu_columns_->mutable_gpu_data(),
+            (int *)this->gpu_ptrB_->mutable_gpu_data());
+    }
+}
+
+TYPED_TEST(MakeTransConvDictTest, TestResultCoincide) {
+    for (int k = 0; k < this->all_boundaries_.size(); ++k) {
+        CSCParameter::Boundary b = this->all_boundaries_[k];
+        make_transposed_conv_dict_cpu(this->n_, this->m_, this->Dl_->cpu_data(),
+            this->channels_, this->height_, this->width_, this->kernel_h_, this->kernel_w_, b,
+            (TypeParam *)this->cpu_values_->mutable_cpu_data(),
+            (int *)this->cpu_columns_->mutable_cpu_data(),
+            (int *)this->cpu_ptrB_->mutable_cpu_data());
+        make_transposed_conv_dict_gpu(this->n_, this->m_, this->Dl_->gpu_data(),
+            this->channels_, this->height_, this->width_, this->kernel_h_, this->kernel_w_, b,
+            (TypeParam *)this->gpu_values_->mutable_gpu_data(),
+            (int *)this->gpu_columns_->mutable_gpu_data(),
+            (int *)this->gpu_ptrB_->mutable_gpu_data());
+        for (int i = 0; i < this->nnz_; ++i) {
+            EXPECT_EQ(((const TypeParam *)this->cpu_values_->cpu_data())[i],
+                ((const TypeParam *)this->gpu_values_->cpu_data())[i]);
+            EXPECT_EQ(((const int *)this->cpu_columns_->cpu_data())[i],
+                ((const int *)this->gpu_columns_->cpu_data())[i]);
+        }
+        for (int i = 0; i <= this->m_*this->height_*this->width_; ++i) {
+            EXPECT_EQ(((const int *)this->cpu_ptrB_->cpu_data())[i],
+                ((const int *)this->gpu_ptrB_->cpu_data())[i])
+                << i << "/" << this->m_*this->height_*this->width_
+                << " ptrB value is invalid with boundary condition "
+                << b;
+        }
+    }
+
+}
+
+template <typename Dtype>
 class CusparseHandleTest : public GPUDeviceTest<Dtype> {
 protected:
     CusparseHandleTest() : handle_wrapper_() {
