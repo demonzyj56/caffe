@@ -138,7 +138,7 @@ protected:
         all_boundaries_.push_back(CSCParameter::PAD_BOTH);
     }
 
-    ~MakeTransConvDictTest() {
+    virtual ~MakeTransConvDictTest() {
         delete Dl_;
         delete cpu_values_;
         delete gpu_values_;
@@ -759,7 +759,7 @@ protected:
         all_boundaries_.push_back(CSCParameter::PAD_BOTH);
     }
 
-    ~ConvDictPrototypeTest() {
+    virtual ~ConvDictPrototypeTest() {
         delete Dl_;
         delete wrapped_;
     }
