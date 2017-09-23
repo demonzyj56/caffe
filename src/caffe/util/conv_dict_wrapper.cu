@@ -49,6 +49,7 @@ __global__ void index_inc_kernel(const int vec_len, const int inc, int *y) {
 template <typename Dtype>
 void make_conv_dict_gpu(const int n, const int m, const Dtype *d_Dl, const int N,
     CSCParameter::Boundary boundary, Dtype *d_values, int *d_columns, int *d_ptrB) {
+    LOG(WARNING) << "This version is deprecated.";
     CHECK_EQ(boundary, CSCParameter::CIRCULANT_BACK) 
         << "Only circulant back boundary is supported!";
     set_shifted_kernel<Dtype><<<CAFFE_GET_BLOCKS(N*m*n), CAFFE_CUDA_NUM_THREADS>>>(

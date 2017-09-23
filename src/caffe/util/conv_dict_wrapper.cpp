@@ -8,6 +8,7 @@ namespace caffe {
 template <typename Dtype>
 void make_conv_dict_cpu(const int n, const int m, const Dtype *Dl, const int N,
     CSCParameter::Boundary boundary, Dtype *values, int *columns, int *ptrB) {
+    LOG(WARNING) << "This version is deprecated.";
     CHECK_EQ(boundary, CSCParameter::CIRCULANT_BACK) 
         << "Only circulant back boundary is supported!";
     for (int i = 0; i < N; ++i) {
@@ -330,11 +331,11 @@ void CSRWrapper<double>::to_dense(double *d_dense) {
         trans->values(), trans->ptrB(), trans->columns(), d_dense, col()));
 }
 
-// TODO(leoyolo): improve this naive impl.
 // Before clipping, check whether h_inds have duplicate entries.
 // If so then die.
 template <typename Dtype>
 shared_ptr<CSRWrapper<Dtype> > CSRWrapper<Dtype>::clip(int nnz, const int *h_inds) {
+    LOG(WARNING) << "This version is deprecated.";
     for (int i = 0; i < nnz-1; ++i) {
         CHECK_LT(h_inds[i], h_inds[i+1]) << "The index set should be strictly increasing.";
     }
@@ -375,9 +376,9 @@ shared_ptr<CSRWrapper<Dtype> > CSRWrapper<Dtype>::clip(int nnz, const int *h_ind
     return clipped;
 }
 
-// TODO(leoyolo): change naive impl.
 template <typename Dtype>
 shared_ptr<CSRWrapper<Dtype> > CSRWrapper<Dtype>::clip_columns(int nnz, const int *h_inds) {
+    LOG(WARNING) << "This version is deprecated.";
     for (int i = 0; i < nnz-1; ++i) {
         CHECK_LT(h_inds[i], h_inds[i+1]) << "The index set should be strictly increasing.";
     }
@@ -475,7 +476,7 @@ ConvDictWrapper<Dtype>::ConvDictWrapper(cusparseHandle_t *handle, const Blob<Dty
     m_(Dl->shape(1)), N_(N), boundary_(boundary), lambda2_(lambda2),
     D_(new CSRWrapper<Dtype>(handle, N_, N_*m_, n_*m_*N_)),
     DtDpl2I_(), debug_(false) {
-    LOG(WARNING) << "Deprecated. Use the correct interface.";
+    LOG(WARNING) << "This version is deprecated.";
     CHECK_EQ(boundary_, CSCParameter::CIRCULANT_BACK)
         << "Only circulant back boundary condtion is currently supported!";
     make_conv_dict_gpu(n_, m_, Dl->gpu_data(), N_, boundary_,
@@ -522,6 +523,7 @@ void ConvDictWrapper<Dtype>::make_conv_dict(const Blob<Dtype> *Dl) {
 
 template <>
 void ConvDictWrapper<float>::create() {
+    LOG(WARNING) << "This version is deprecated.";
     if (NULL == DtDpl2I_) {
         DtDpl2I_.reset(new CSRWrapper<float>(handle_, N_*m_, N_*m_, -1));
     }
@@ -581,6 +583,7 @@ void ConvDictWrapper<float>::create() {
 
 template <>
 void ConvDictWrapper<double>::create() {
+    LOG(WARNING) << "This version is deprecated.";
     if (NULL == DtDpl2I_) {
         DtDpl2I_.reset(new CSRWrapper<double>(handle_, N_*m_, N_*m_, -1));
     }
