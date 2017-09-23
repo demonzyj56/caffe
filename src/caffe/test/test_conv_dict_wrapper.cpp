@@ -877,8 +877,6 @@ TYPED_TEST(ConvDictPrototypeTest, TestPrototypeMethodSanity) {
             (int *)trans.mutable_cpu_ptrB());
         trans.prune();
         shared_ptr<CSRWrapper<TypeParam> > wrapped = trans.transpose();
-        LOG(INFO) << "wrapped size: " << "row: " << wrapped->row() << " col: " << wrapped->col()
-            << " nnz: " << wrapped->nnz();
         wrapped->to_dense((TypeParam *)this->wrapped_->mutable_gpu_data()); 
         this->unroll_dict_prototype(b);
         for (int i = 0; i < this->prototype_.size(); ++i) {
