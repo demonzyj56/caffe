@@ -5,6 +5,7 @@
 #include "caffe/util/benchmark.hpp"
 #include "caffe/util/im2patches.hpp"
 #include "caffe/util/conv_dict_wrapper.hpp"
+#include "caffe/util/math_functions.hpp"
 
 namespace caffe {
 
@@ -98,6 +99,8 @@ void CSCLayer<Dtype>::Reshape(const vector<Blob<Dtype>*>& bottom,
   this->alpha_diff_buffer_->Reshape(top_patch_shape_);
   this->bottom_patch_buffer_->Reshape(bottom_patch_shape_);
   this->bottom_recon_buffer_->Reshape(bottom[0]->shape());
+  // normalize dictionary
+  this->normalize_dict_();
 }
 
 template <typename Dtype>
@@ -509,8 +512,9 @@ void CSCLayer<Dtype>::caffe_cpu_soft_thresholding_(const int n, Dtype thresh, Dt
 template <typename Dtype>
 void CSCLayer<Dtype>::csc_inverse_(const Blob<Dtype> *top, Blob<Dtype> *beta) {
     CusparseHandle handle;
-    ConvDictWrapper<Dtype> conv_dict(handle.get(), this->blobs_[0].get(), top->shape(2)*top->shape(3),
-        boundary_, lambda2_);
+    ConvDictWrapper<Dtype> conv_dict(handle.get(), this->blobs_[0].get(), this->channels_,
+        top->shape(2), top->shape(3), this->kernel_h_, this->kernel_w_, this->boundary_,
+        this->lambda2_, this->verbose_);
     LOG_IF(INFO, verbose_) << "Creating slice dictionary";
     // conv_dict.create();
     this->permute_num_channels_(top, beta, true);
@@ -549,6 +553,23 @@ void CSCLayer<Dtype>::csc_inverse_(const Blob<Dtype> *top, Blob<Dtype> *beta) {
             beta_ptr[offset] = buffer_ptr[j];
         }
     }
+}
+
+template <typename Dtype>
+void CSCLayer<Dtype>::normalize_dict_() {
+    // CHECK_EQ(this->blobs_[0]->shape(1), num_output_);
+    // Dtype *dict_data = this->blobs_[0]->mutable_cpu_data();
+    // vector<Dtype> norm_sqr(num_output_, Dtype(2));
+    // for (int i = 0; i < num_output_; ++i) {
+    //     norm_sqr[i] = std::sqrt(caffe_cpu_strided_dot(this->blobs_[0]->shape(0), dict_data+i,
+    //         num_output_, dict_data+i, num_output_) + 1e-6);
+    //     LOG_IF(INFO, verbose_) << "The " << i << "th dict norm is " << norm_sqr[i];
+    // }
+    // for (int i = 0; i < this->blobs_[0]->shape(0); ++i) {
+    //     for (int j = 0; j < this->blobs_[0]->shape(1); ++j) {
+    //         dict_data[i * num_output_ + j] /= norm_sqr[j];
+    //     }
+    // }
 }
 
 

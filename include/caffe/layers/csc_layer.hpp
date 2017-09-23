@@ -68,6 +68,9 @@ class CSCLayer : public Layer<Dtype> {
   // 4. Put the entries back to the corresponding indices.
   void csc_inverse_(const Blob<Dtype> *top, Blob<Dtype> *beta);
 
+  // normalize the dictionary Dl with each column having norm 1.
+  void normalize_dict_();
+
 
   void im2patches_gpu_(const Blob<Dtype> *blob, Blob<Dtype> *patches, bool compute_diff);
   void patches2im_gpu_(const Blob<Dtype> *patches, Blob<Dtype> *blob, bool compute_diff);
