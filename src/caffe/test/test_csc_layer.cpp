@@ -14,7 +14,7 @@ class CSCLayerTest : public GPUDeviceTest<Dtype> {
   // typedef typename TypeParam::Dtype Dtype;
  protected:
   CSCLayerTest()
-      : blob_bottom_(new Blob<Dtype>(10, 3, 32, 32)), blob_top_(new Blob<Dtype>()) {
+      : blob_bottom_(new Blob<Dtype>(1, 3, 32, 32)), blob_top_(new Blob<Dtype>()) {
     FillerParameter filler_param;
     GaussianFiller<Dtype> filler(filler_param);
     filler.Fill(this->blob_bottom_);
@@ -64,7 +64,7 @@ TYPED_TEST(CSCLayerTest, TestSetUp) {
     new CSCLayer<TypeParam>(layer_param));
   layer->SetUp(this->blob_bottom_vec_, this->blob_top_vec_);
   vector<shared_ptr<Blob<TypeParam> > > &blobs = layer->blobs();
-  EXPECT_EQ(this->blob_top_->num(), 10);
+  EXPECT_EQ(this->blob_top_->num(), 1);
   EXPECT_EQ(this->blob_top_->channels(), this->num_output_);
   EXPECT_EQ(this->blob_top_->height(), 27);
   EXPECT_EQ(this->blob_top_->width(), 27);
@@ -142,7 +142,7 @@ TYPED_TEST(CSCLayerTest, TestBoundaryCirculantBack) {
     new CSCLayer<TypeParam>(layer_param));
   layer->SetUp(this->blob_bottom_vec_, this->blob_top_vec_);
   layer->Forward(this->blob_bottom_vec_, this->blob_top_vec_);
-  EXPECT_EQ(this->blob_top_->num(), 10);
+  EXPECT_EQ(this->blob_top_->num(), 1);
   EXPECT_EQ(this->blob_top_->channels(), this->num_output_);
   EXPECT_EQ(this->blob_top_->height(), 32);
   EXPECT_EQ(this->blob_top_->width(), 32);
