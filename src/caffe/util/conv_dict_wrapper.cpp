@@ -525,7 +525,8 @@ template <>
 void ConvDictWrapper<float>::create() {
     LOG(WARNING) << "This version is deprecated.";
     if (NULL == DtDpl2I_) {
-        DtDpl2I_.reset(new CSRWrapper<float>(handle_, N_*m_, N_*m_, -1));
+        DtDpl2I_.reset(new CSRWrapper<float>(handle_, m_*height_*width_,
+                m_*height_*width_, -1));
     }
     int base, nnz;
     csrgemm2Info_t info = NULL;
@@ -585,7 +586,8 @@ template <>
 void ConvDictWrapper<double>::create() {
     LOG(WARNING) << "This version is deprecated.";
     if (NULL == DtDpl2I_) {
-        DtDpl2I_.reset(new CSRWrapper<double>(handle_, N_*m_, N_*m_, -1));
+        DtDpl2I_.reset(new CSRWrapper<double>(handle_, m_*height_*width_,
+                m_*height_*width_, -1));
     }
     int base, nnz;
     csrgemm2Info_t info = NULL;
@@ -698,6 +700,7 @@ shared_ptr<CSRWrapper<float> > ConvDictWrapper<float>::create_clipped(int nind, 
     CUSPARSE_CHECK(cusparseDestroyCsrgemm2Info(info));
     return lhs;
 }
+
 template <>
 shared_ptr<CSRWrapper<double> > ConvDictWrapper<double>::create_clipped(int nind, const int *h_ind) {
     // step 0: create transposed D and identity matrix and output
@@ -837,6 +840,7 @@ void ConvDictWrapper<float>::analyse(int nnz, const int *h_inds) {
         LOG(INFO) << "The " << i+1 << "th eigenvalue is " << eig;
     }
 }
+
 template <>
 void ConvDictWrapper<double>::analyse(int nnz, const int *h_inds) {
     shared_ptr<CSRWrapper<double> > clipped;
