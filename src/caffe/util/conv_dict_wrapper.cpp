@@ -488,10 +488,10 @@ ConvDictWrapper<Dtype>::ConvDictWrapper(cusparseHandle_t *handle, const Blob<Dty
 template <typename Dtype>
 ConvDictWrapper<Dtype>::ConvDictWrapper(cusparseHandle_t *handle, const Blob<Dtype> *Dl, int channels,
         int height, int width, int kernel_h, int kernel_w, CSCParameter::Boundary boundary,
-        Dtype lambda2)
+        Dtype lambda2, bool verbose)
         : handle_(handle), dnsolver_handle_(NULL), spsolver_handle_(NULL), n_(Dl->shape(0)),
         m_(Dl->shape(1)), N_(-1), boundary_(boundary), lambda2_(lambda2),
-        D_(), DtDpl2I_(), debug_(false), channels_(channels), height_(height), width_(width),
+        D_(), DtDpl2I_(), debug_(verbose), channels_(channels), height_(height), width_(width),
         kernel_h_(kernel_h), kernel_w_(kernel_w) {
     CHECK_EQ(n_, channels_ * kernel_h_ * kernel_w_);
     CUSOLVER_CHECK(cusolverSpCreate(&spsolver_handle_));

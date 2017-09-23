@@ -184,7 +184,7 @@ public:
 
     explicit ConvDictWrapper(cusparseHandle_t *handle, const Blob<Dtype> *Dl, int channels,
         int height, int width, int kernel_h, int kernel_w, CSCParameter::Boundary boundary,
-        Dtype lambda2);
+        Dtype lambda2, bool verbose);
 
     ~ConvDictWrapper();
 

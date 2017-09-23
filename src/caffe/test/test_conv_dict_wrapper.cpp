@@ -609,7 +609,7 @@ protected:
     ConvDictWrapperTest()
     : handle_(), n_(18), m_(3), Dl_(new Blob<Dtype>()), 
     channels_(2), height_(4), width_(5), kernel_h_(3), kernel_w_(3),
-    all_boundaries_(), lambda2_(0.1) {
+    all_boundaries_(), lambda2_(0.1), verbose_(true) {
         vector<int> Dl_shape(2);
         Dl_shape[0] = n_;
         Dl_shape[1] = m_;
@@ -633,7 +633,7 @@ protected:
     shared_ptr<ConvDictWrapper<Dtype> > conv_dict_factory(CSCParameter::Boundary b) {
         return shared_ptr<ConvDictWrapper<Dtype> >(new ConvDictWrapper<Dtype>(
             handle_.get(), Dl_, channels_, height_, width_, kernel_h_, kernel_w_,
-            b, lambda2_));
+            b, lambda2_, verbose_));
     }
 
     CusparseHandle handle_;
@@ -647,6 +647,7 @@ protected:
     int kernel_w_;
     vector<CSCParameter::Boundary> all_boundaries_;
     Dtype lambda2_;
+    bool verbose_;
 };
 
 TYPED_TEST_CASE(ConvDictWrapperTest, TestDtypes);
