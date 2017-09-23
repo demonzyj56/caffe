@@ -607,106 +607,97 @@ template <typename Dtype>
 class ConvDictWrapperTest : public GPUDeviceTest<Dtype> {
 protected:
     ConvDictWrapperTest()
-    : handle_(), conv_dict_(NULL), Dl_(NULL), N_(20),
-    boundary_(CSCParameter::CIRCULANT_BACK), lambda2_(0.1) {
+    : handle_(), n_(18), m_(3), Dl_(new Blob<Dtype>()), 
+    channels_(2), height_(4), width_(5), kernel_h_(3), kernel_w_(3),
+    all_boundaries_(), lambda2_(0.1) {
         vector<int> Dl_shape(2);
-        Dl_shape[0] = 7;
-        Dl_shape[1] = 3;
-        Dl_ = new Blob<Dtype>(Dl_shape);
+        Dl_shape[0] = n_;
+        Dl_shape[1] = m_;
+        Dl_->Reshape(Dl_shape);
         FillerParameter filler_param;
         filler_param.set_min(0.5);
         filler_param.set_max(1);
         UniformFiller<Dtype> filler(filler_param);
         filler.Fill(Dl_);
-        conv_dict_ = new ConvDictWrapper<Dtype>(handle_.get(),
-            Dl_, N_, boundary_, lambda2_);
+        all_boundaries_.push_back(CSCParameter::CIRCULANT_BACK);
+        all_boundaries_.push_back(CSCParameter::CIRCULANT_FRONT);
+        all_boundaries_.push_back(CSCParameter::PAD_FRONT);
+        all_boundaries_.push_back(CSCParameter::PAD_BACK);
+        all_boundaries_.push_back(CSCParameter::PAD_BOTH);
     }
+
     virtual ~ConvDictWrapperTest() {
         delete Dl_;
-        delete conv_dict_;
+    }
+
+    shared_ptr<ConvDictWrapper<Dtype> > conv_dict_factory(CSCParameter::Boundary b) {
+        return shared_ptr<ConvDictWrapper<Dtype> >(new ConvDictWrapper<Dtype>(
+            handle_.get(), Dl_, channels_, height_, width_, kernel_h_, kernel_w_,
+            b, lambda2_));
     }
 
     CusparseHandle handle_;
-    ConvDictWrapper<Dtype> *conv_dict_;
-    Blob<Dtype> *Dl_;
-    int N_;
-    CSCParameter::Boundary boundary_;
+    int n_;
+    int m_;
+    Blob<Dtype> * const Dl_;
+    int channels_;
+    int height_;
+    int width_;
+    int kernel_h_;
+    int kernel_w_;
+    vector<CSCParameter::Boundary> all_boundaries_;
     Dtype lambda2_;
 };
 
 TYPED_TEST_CASE(ConvDictWrapperTest, TestDtypes);
 
-TYPED_TEST(ConvDictWrapperTest, TestSetUp) {
-}
-
 TYPED_TEST(ConvDictWrapperTest, TestConvDictSize) {
-    EXPECT_EQ(this->conv_dict_->D()->row(), this->N_);
-    EXPECT_EQ(this->conv_dict_->D()->col(), this->N_*this->Dl_->shape(1));
-    if (this->boundary_ == CSCParameter::CIRCULANT_BACK ||
-        this->boundary_ == CSCParameter::CIRCULANT_FRONT) {
-        EXPECT_EQ(this->conv_dict_->D()->nnz(), this->N_*this->Dl_->count());
-    } else {
-        NOT_IMPLEMENTED;
-    }
-}
-
-TYPED_TEST(ConvDictWrapperTest, TestConvDictSanity) {
-    SyncedMemory dense(this->Dl_->shape(1)*this->N_*this->N_*sizeof(TypeParam));
-    this->conv_dict_->D()->to_dense((TypeParam *)dense.mutable_gpu_data());
-    const TypeParam *cpu_ptr = (const TypeParam *)dense.cpu_data();
-    for (int b = 0; b < this->N_; ++b) {
-        for (int r = 0; r < this->Dl_->shape(0); ++r) {
-            for (int c = 0; c < this->Dl_->shape(1); ++c) {
-                int row = (b + r) % this->N_;
-                int col = b * this->Dl_->shape(1) + c;
-                int ind = row * (this->N_*this->Dl_->shape(1)) + col;
-                EXPECT_EQ(cpu_ptr[ind], this->Dl_->cpu_data()[r*this->Dl_->shape(1)+c])
-                    << " Block: " << b
-                    << " r: " << r
-                    << " c: " << c
-                    << " row: " << row
-                    << " col: " << col
-                    << " ind: " << ind;
-            }
+    for (int i = 0; i < this->all_boundaries_.size(); ++i) {
+        shared_ptr<ConvDictWrapper<TypeParam> > conv_dict = 
+            this->conv_dict_factory(this->all_boundaries_[i]);
+        EXPECT_EQ(conv_dict->D()->row(), this->channels_*this->height_*this->width_);
+        EXPECT_EQ(conv_dict->D()->col(), this->m_*this->height_*this->width_);
+        if (this->all_boundaries_[i] == CSCParameter::CIRCULANT_BACK ||
+                this->all_boundaries_[i] == CSCParameter::CIRCULANT_FRONT) {
+            EXPECT_EQ(conv_dict->D()->nnz(), this->height_*this->width_*this->Dl_->count());
         }
     }
 }
 
-
 TYPED_TEST(ConvDictWrapperTest, TestCreate) {
-    int n = this->Dl_->shape(0);
-    int m = this->Dl_->shape(1);
-    this->conv_dict_->create();
-    EXPECT_TRUE(this->conv_dict_->DtDpl2I());
-    EXPECT_EQ(this->conv_dict_->DtDpl2I()->row(), this->N_*m);
-    EXPECT_EQ(this->conv_dict_->DtDpl2I()->col(), this->N_*m);
-    EXPECT_TRUE(this->conv_dict_->DtDpl2I()->symmetric());
-    if (this->boundary_ == CSCParameter::CIRCULANT_BACK ||
-        this->boundary_ == CSCParameter::CIRCULANT_FRONT) {
-        EXPECT_EQ(this->conv_dict_->DtDpl2I()->nnz(), this->N_*(2*n-1)*m*m);
-    } else {
-        NOT_IMPLEMENTED;
+    for (int i = 0; i < this->all_boundaries_.size(); ++i) {
+        shared_ptr<ConvDictWrapper<TypeParam> > conv_dict = 
+            this->conv_dict_factory(this->all_boundaries_[i]);
+        conv_dict->create();
+        EXPECT_TRUE(conv_dict->DtDpl2I());
+        EXPECT_EQ(conv_dict->DtDpl2I()->row(), this->m_*this->height_*this->width_);
+        EXPECT_EQ(conv_dict->DtDpl2I()->col(), this->m_*this->height_*this->width_);
+        EXPECT_TRUE(conv_dict->DtDpl2I()->symmetric());
     }
 }
 
 TYPED_TEST(ConvDictWrapperTest, TestCreateClipped) {
     int nnz = 10;
-    vector<int> inds(this->conv_dict_->D()->col());
+    vector<int> inds(this->m_*this->height_*this->width_);
     for (int i = 0; i < inds.size(); ++i) {
         inds[i] = i;
     }
     std::random_shuffle(inds.begin(), inds.end());
     std::sort(inds.begin(), inds.begin() + nnz);
-    shared_ptr<CSRWrapper<TypeParam> > clipped =
-        this->conv_dict_->create_clipped(nnz, inds.data());
-    ASSERT_TRUE(clipped);
-    EXPECT_EQ(clipped->row(), clipped->col());
-    EXPECT_TRUE(clipped->symmetric());
+    for (int i = 0; i < this->all_boundaries_.size(); ++i) {
+        shared_ptr<ConvDictWrapper<TypeParam> > conv_dict = 
+            this->conv_dict_factory(this->all_boundaries_[i]);
+        shared_ptr<CSRWrapper<TypeParam> > clipped =
+            conv_dict->create_clipped(nnz, inds.data());
+        ASSERT_TRUE(clipped);
+        EXPECT_EQ(clipped->row(), clipped->col());
+        EXPECT_TRUE(clipped->symmetric());
+    }
 }
 
 TYPED_TEST(ConvDictWrapperTest, TestSolve) {
     int nnz = 10;
-    vector<int> inds(this->conv_dict_->D()->col());
+    vector<int> inds(this->m_*this->height_*this->width_);
     for (int i = 0; i < inds.size(); ++i) {
         inds[i] = i;
     }
@@ -715,14 +706,18 @@ TYPED_TEST(ConvDictWrapperTest, TestSolve) {
     SyncedMemory rhs(sizeof(TypeParam)*nnz);
     TypeParam *rhs_ptr = (TypeParam *)rhs.mutable_gpu_data();
     caffe_gpu_rng_gaussian(nnz, TypeParam(0), TypeParam(1), rhs_ptr);
-    this->conv_dict_->create();
-    this->conv_dict_->solve(nnz, inds.data(), rhs_ptr);
-    this->conv_dict_->analyse(nnz, inds.data());
+    for (int i = 0; i < this->all_boundaries_.size(); ++i) {
+        shared_ptr<ConvDictWrapper<TypeParam> > conv_dict = 
+            this->conv_dict_factory(this->all_boundaries_[i]);
+        conv_dict->create();
+        conv_dict->solve(nnz, inds.data(), rhs_ptr);
+        conv_dict->analyse(nnz, inds.data());
+    }
 }
 
 TYPED_TEST(ConvDictWrapperTest, TestSolveClipped) {
     int nnz = 10;
-    vector<int> inds(this->conv_dict_->D()->col());
+    vector<int> inds(this->m_*this->height_*this->width_);
     for (int i = 0; i < inds.size(); ++i) {
         inds[i] = i;
     }
@@ -731,8 +726,12 @@ TYPED_TEST(ConvDictWrapperTest, TestSolveClipped) {
     SyncedMemory rhs(sizeof(TypeParam)*nnz);
     TypeParam *rhs_ptr = (TypeParam *)rhs.mutable_gpu_data();
     caffe_gpu_rng_gaussian(nnz, TypeParam(0), TypeParam(1), rhs_ptr);
-    this->conv_dict_->solve(nnz, inds.data(), rhs_ptr);
-    this->conv_dict_->analyse(nnz, inds.data());
+    for (int i = 0; i < this->all_boundaries_.size(); ++i) {
+        shared_ptr<ConvDictWrapper<TypeParam> > conv_dict = 
+            this->conv_dict_factory(this->all_boundaries_[i]);
+        conv_dict->solve(nnz, inds.data(), rhs_ptr);
+        conv_dict->analyse(nnz, inds.data());
+    }
 }
 
 // A comparison of the wrapped convolutional dictionary generation method with the original prototype.
