@@ -511,7 +511,7 @@ void CSCLayer<Dtype>::caffe_cpu_soft_thresholding_(const int n, Dtype thresh, Dt
 //! Yet another naive implementation.
 template <typename Dtype>
 void CSCLayer<Dtype>::csc_inverse_(const Blob<Dtype> *top, Blob<Dtype> *beta) {
-    CusparseHandle handle;
+    CusparseHandle handle(this->stream_);
     ConvDictWrapper<Dtype> conv_dict(handle.get(), this->blobs_[0].get(), this->channels_,
         top->shape(2), top->shape(3), this->kernel_h_, this->kernel_w_, this->boundary_,
         this->lambda2_, this->verbose_);

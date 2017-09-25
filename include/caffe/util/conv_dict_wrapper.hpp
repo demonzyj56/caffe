@@ -74,6 +74,12 @@ public:
         CHECK_EQ(CUSPARSE_STATUS_SUCCESS, cusparseCreate(&handle_))
             << "Unable to create cusparse handle!";
     }
+    CusparseHandle(cudaStream_t stream_id) : handle_(NULL), stream_(stream_id) {
+        CUSPARSE_CHECK(cusparseCreate(&handle_));
+        if (stream_id != NULL) {
+            CUSPARSE_CHECK(cusparseSetStream(handle_, stream_id));
+        }
+    }
     ~CusparseHandle() {
         cusparseStatus_t status = cusparseDestroy(handle_);
         LOG_IF(INFO, CUSPARSE_STATUS_SUCCESS != status)
@@ -87,6 +93,7 @@ public:
 
 private:
     cusparseHandle_t handle_;
+    cudaStream_t stream_;
 
     DISABLE_COPY_AND_ASSIGN(CusparseHandle);
 };

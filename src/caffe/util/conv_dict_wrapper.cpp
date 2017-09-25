@@ -496,6 +496,12 @@ ConvDictWrapper<Dtype>::ConvDictWrapper(cusparseHandle_t *handle, const Blob<Dty
     CHECK_EQ(n_, channels_ * kernel_h_ * kernel_w_);
     CUSOLVER_CHECK(cusolverSpCreate(&spsolver_handle_));
     CUSOLVER_CHECK(cusolverDnCreate(&dnsolver_handle_));
+    // If the handle is bound with some stream, use it.
+    cudaStream_t stream_id = NULL;
+    if (cusparseGetStream(*handle, &stream_id) == CUSPARSE_STATUS_SUCCESS) {
+        CUSOLVER_CHECK(cusolverDnSetStream(dnsolver_handle_, stream_id));
+        CUSOLVER_CHECK(cusolverSpSetStream(spsolver_handle_, stream_id));
+    }
     this->make_conv_dict(Dl);
     CHECK(D_);
 }
