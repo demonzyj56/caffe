@@ -48,6 +48,10 @@ class Layer {
           blobs_[i]->FromProto(layer_param_.blobs(i));
         }
       }
+#if USE_NCCL
+      // Initialized and managed by NCCL.
+      stream_ = NULL;
+#endif
     }
   virtual ~Layer() {}
 
@@ -290,6 +294,15 @@ class Layer {
     }
     param_propagate_down_[param_id] = value;
   }
+#ifdef USE_NCCL
+  /**
+   * @brief Sets the cuda stream if multiple gpu is used.  The stream is managed
+   *        by caffe::NCCL.
+   */
+  inline void set_cuda_stream(const cudaStream_t stream_id) {
+    stream_ = stream_id;
+  }
+#endif
 
 
  protected:
@@ -301,6 +314,10 @@ class Layer {
   vector<shared_ptr<Blob<Dtype> > > blobs_;
   /** Vector indicating whether to compute the diff of each param blob. */
   vector<bool> param_propagate_down_;
+#ifdef USE_NCCL
+  /** Cuda stream broadcasted from NCCL::Init(). */
+  cudaStream_t stream_;
+#endif
 
   /** The vector that indicates whether each top blob has a non-zero weight in
    *  the objective function. */

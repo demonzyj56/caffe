@@ -141,6 +141,11 @@ void NCCL<Dtype>::Init() {
   if (solver_->param().layer_wise_reduce()) {
     CUDA_CHECK(cudaStreamCreateWithFlags(&stream_, cudaStreamNonBlocking));
   }
+  // Broadcast stream to each layer.
+  vector<shared_ptr<Layer<Dtype> > > layers = solver_->net()->layers();
+  for (int i = 0; i < layers.size(); ++i) {
+    layers[i]->set_cuda_stream(stream_);
+  }
 }
 
 template<typename Dtype>
