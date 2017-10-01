@@ -39,9 +39,9 @@ layer {
   bottom: "data"
   top: "csc"
   csc_param {
-    kernel_h: 6
-    kernel_w: 6
-    num_output: 100
+    kernel_h: 5
+    kernel_w: 5
+    num_output: 200
     admm_max_iter: 1000
     admm_max_rho: 1
     admm_eta: 1.1
@@ -51,7 +51,7 @@ layer {
     filler {
         type: "xavier"
     }
-    boundary: CIRCULANT_BACK
+    boundary: PAD_BOTH
   }
   param { lr_mult: 1 }
   param { lr_mult: 0 }
@@ -63,8 +63,8 @@ layer {
   top: "pool"
   pooling_param {
     pool: MAX
-    kernel_size: 12
-    stride: 12
+    kernel_size: 14
+    stride: 14
   }
 }
 layer {
