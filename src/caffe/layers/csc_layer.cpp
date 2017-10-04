@@ -539,7 +539,9 @@ void CSCLayer<Dtype>::csc_inverse_(const Blob<Dtype> *top, Blob<Dtype> *beta) {
         CPUTimer timer;
         timer.Start();
         // buffer is synced automatically
-        conv_dict.solve(indices.size(), indices.data(), (Dtype *)buffer.mutable_gpu_data());
+        if (indices.size() > 0) {
+            conv_dict.solve(indices.size(), indices.data(), (Dtype *)buffer.mutable_gpu_data());
+        }
         LOG_IF(INFO, verbose_) 
             << "(" << n+1 << "/" << top->shape(0) << ") "
             << "Nonzeros: " << indices.size()
