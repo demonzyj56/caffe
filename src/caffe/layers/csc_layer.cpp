@@ -560,18 +560,18 @@ void CSCLayer<Dtype>::csc_inverse_(const Blob<Dtype> *top, Blob<Dtype> *beta) {
 
 template <typename Dtype>
 void CSCLayer<Dtype>::normalize_dict_() {
-    CHECK_EQ(this->blobs_[0]->shape(1), num_output_);
-    Dtype *dict_data = this->blobs_[0]->mutable_cpu_data();
-    vector<Dtype> norm_sqr(num_output_, Dtype(0));
-    for (int i = 0; i < num_output_; ++i) {
-        norm_sqr[i] = std::sqrt(caffe_cpu_strided_dot(this->blobs_[0]->shape(0), dict_data+i,
-            num_output_, dict_data+i, num_output_) + 1e-6);
-    }
-    for (int i = 0; i < this->blobs_[0]->shape(0); ++i) {
-        for (int j = 0; j < this->blobs_[0]->shape(1); ++j) {
-            dict_data[i * num_output_ + j] /= norm_sqr[j];
-        }
-    }
+    // CHECK_EQ(this->blobs_[0]->shape(1), num_output_);
+    // Dtype *dict_data = this->blobs_[0]->mutable_cpu_data();
+    // vector<Dtype> norm_sqr(num_output_, Dtype(0));
+    // for (int i = 0; i < num_output_; ++i) {
+    //     norm_sqr[i] = std::sqrt(caffe_cpu_strided_dot(this->blobs_[0]->shape(0), dict_data+i,
+    //         num_output_, dict_data+i, num_output_) + 1e-6);
+    // }
+    // for (int i = 0; i < this->blobs_[0]->shape(0); ++i) {
+    //     for (int j = 0; j < this->blobs_[0]->shape(1); ++j) {
+    //         dict_data[i * num_output_ + j] /= norm_sqr[j];
+    //     }
+    // }
 }
 
 
