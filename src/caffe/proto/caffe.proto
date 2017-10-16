@@ -59,6 +59,8 @@ message FillerParameter {
     AVERAGE = 2;
   }
   optional VarianceNorm variance_norm = 8 [default = FAN_IN];
+  // The path for a predefined blob to load.
+  optional string path = 9;
 }
 
 message NetParameter {

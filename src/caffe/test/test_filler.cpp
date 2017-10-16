@@ -238,4 +238,36 @@ TYPED_TEST(MSRAFillerTest, TestFillAverage) {
   this->test_params(FillerParameter_VarianceNorm_AVERAGE, n);
 }
 
+template <typename Dtype>
+class PredefinedFillerTest : public ::testing::Test {
+ protected:
+  PredefinedFillerTest()
+      : blob_(new Blob<Dtype>()), filler_param_() {
+        vector<int> blob_shape;
+        blob_shape.push_back(108);
+        blob_shape.push_back(100);
+        blob_->Reshape(blob_shape);
+        filler_param_.set_path("src/caffe/test/test_data/random_blob.binaryproto");
+        filler_.reset(new PredefinedFiller<Dtype>(filler_param_));
+        filler_->Fill(blob_);
+      }
+  virtual ~PredefinedFillerTest() {
+    delete blob_;
+  }
+  Blob<Dtype>* const blob_;
+  FillerParameter filler_param_;
+  shared_ptr<PredefinedFiller<Dtype> > filler_;
+};
+
+TYPED_TEST_CASE(PredefinedFillerTest, TestDtypes);
+
+TYPED_TEST(PredefinedFillerTest, TestFill) {
+    const TypeParam *data = this->blob_->cpu_data();
+    for (int i = 0; i < this->blob_->count(); ++i) {
+        // This is how the data is generated.
+        EXPECT_GE(data[i], TypeParam(2));
+        EXPECT_LE(data[i], TypeParam(3));
+    }
+}
+
 }  // namespace caffe

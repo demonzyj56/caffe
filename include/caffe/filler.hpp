@@ -11,6 +11,7 @@
 #include "caffe/proto/caffe.pb.h"
 #include "caffe/syncedmem.hpp"
 #include "caffe/util/math_functions.hpp"
+#include "caffe/util/io.hpp"
 
 namespace caffe {
 
@@ -262,6 +263,24 @@ class BilinearFiller : public Filler<Dtype> {
 };
 
 /**
+ * @brief Load a predefined or pretrained blob from disk.
+ *
+ * Note that the loaded blob should match exactly the shape of target blob.
+ */
+template <typename Dtype>
+class PredefinedFiller : public Filler<Dtype> {
+ public:
+  explicit PredefinedFiller(const FillerParameter& param)
+      : Filler<Dtype>(param) {}
+  virtual void Fill(Blob<Dtype>* blob) {
+    BlobProto blob_proto;
+    ReadProtoFromBinaryFileOrDie(this->filler_param_.path(), &blob_proto);
+    // the loaded blob should match exactly the underlying blob
+    blob->FromProto(blob_proto, false);
+  }
+};
+
+/**
  * @brief Get a specific filler from the specification given in FillerParameter.
  *
  * Ideally this would be replaced by a factory pattern, but we will leave it
@@ -284,6 +303,8 @@ Filler<Dtype>* GetFiller(const FillerParameter& param) {
     return new MSRAFiller<Dtype>(param);
   } else if (type == "bilinear") {
     return new BilinearFiller<Dtype>(param);
+  } else if (type == "predefined") {
+    return new PredefinedFiller<Dtype>(param);
   } else {
     CHECK(false) << "Unknown filler name: " << param.type();
   }
