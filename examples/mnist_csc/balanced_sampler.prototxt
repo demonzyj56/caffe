@@ -1,36 +1,30 @@
-name: "mnist_csc"
+name: "mnist_balanced_sampler"
 layer {
   name: "mnist"
-  type: "Data"
+  type: "Python"
   top: "data"
   top: "label"
   include {
     phase: TRAIN
   }
-  transform_param {
-    scale: 0.00390625
-  }
-  data_param {
-    source: "examples/mnist/mnist_train_lmdb"
-    batch_size: 100
-    backend: LMDB
+  python_param {
+    module: "balanced_sampling_layer.layer" 
+    layer: "BalancedSamplingLayer"
+    param_str: "{\'name\': \'mnist\', \'samples_per_class\': 30, \'batch_size\': 100, \'train\': True}"
   }
 }
 layer {
   name: "mnist"
-  type: "Data"
+  type: "Python"
   top: "data"
   top: "label"
   include {
     phase: TEST
   }
-  transform_param {
-    scale: 0.00390625
-  }
-  data_param {
-    source: "examples/mnist/mnist_test_lmdb"
-    batch_size: 100
-    backend: LMDB
+  python_param {
+    module: "balanced_sampling_layer.layer" 
+    layer: "BalancedSamplingLayer"
+    param_str: "{\'name\': \'mnist\', \'samples_per_class\': 100, \'batch_size\': 100, \'train\': False}"
   }
 }
 layer {
@@ -39,9 +33,9 @@ layer {
   bottom: "data"
   top: "csc"
   csc_param {
-    kernel_h: 5
-    kernel_w: 5
-    num_output: 100
+    kernel_h: 15
+    kernel_w: 15
+    num_output: 15
     admm_max_iter: 1000
     admm_max_rho: 1
     admm_eta: 1.1
@@ -49,8 +43,7 @@ layer {
     lambda2: 1
     verbose: false
     filler {
-        type: "predefined"
-        path: "examples/csc/centroids.binaryproto"
+        type: "xavier"
     }
     boundary: PAD_BOTH
   }
@@ -62,7 +55,6 @@ layer {
   type: "BatchNorm"
   bottom: "csc"
   top: "bn"
-  propagate_down: 0
 }
 layer {
   name: "scale"
@@ -82,7 +74,7 @@ layer {
 layer {
   name: "pool"
   type: "Pooling"
-  bottom: "bn"
+  bottom: "csc"
   top: "pool"
   pooling_param {
     pool: MAX

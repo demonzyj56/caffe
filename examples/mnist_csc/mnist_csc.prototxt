@@ -41,7 +41,7 @@ layer {
   csc_param {
     kernel_h: 5
     kernel_w: 5
-    num_output: 100
+    num_output: 256
     admm_max_iter: 1000
     admm_max_rho: 1
     admm_eta: 1.1
@@ -49,20 +49,32 @@ layer {
     lambda2: 1
     verbose: false
     filler {
-        type: "predefined"
-        path: "examples/csc/centroids.binaryproto"
+        type: "xavier"
     }
     boundary: PAD_BOTH
   }
-  param { lr_mult: 1 decay_mult: 1 }
-  param { lr_mult: 0 decay_mult: 0 }
+  param { lr_mult: 1 }
+  param { lr_mult: 0 }
+}
+layer {
+  name: "pool"
+  type: "Pooling"
+  bottom: "csc"
+  top: "pool"
+  pooling_param {
+    pool: MAX
+    kernel_size: 14
+    stride: 14
+  }
 }
 layer {
   name: "bn"
   type: "BatchNorm"
-  bottom: "csc"
+  bottom: "pool"
   top: "bn"
-  propagate_down: 0
+  param { lr_mult: 0 }
+  param { lr_mult: 0 }
+  param { lr_mult: 0 }
 }
 layer {
   name: "scale"
@@ -80,20 +92,9 @@ layer {
   top: "bn"
 }
 layer {
-  name: "pool"
-  type: "Pooling"
-  bottom: "bn"
-  top: "pool"
-  pooling_param {
-    pool: MAX
-    kernel_size: 7
-    stride: 7
-  }
-}
-layer {
   name: "ip"
   type: "InnerProduct"
-  bottom: "pool"
+  bottom: "bn"
   top: "ip"
   param {
     lr_mult: 1

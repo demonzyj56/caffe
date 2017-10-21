@@ -2,24 +2,26 @@
 # then another factor of 10 after 10 more epochs (5000 iters)
 
 # The train/test net protocol buffer definition
-net: "examples/csc/mnist_csc.prototxt"
+net: "examples/mnist_csc/balanced_sampler.prototxt"
 # test_iter specifies how many forward passes the test should carry out
-# In the case of CIFAR10, we have test batch size 100 and 100 test iterations,
-# covering the full 10,000 testing images.
-test_iter: 100
+# In the case of MNIST, we have test batch size 100 and 10 test iterations,
+test_iter: 10
 # Carry out testing every 1000 training iterations.
-test_interval: 100
+test_interval: 30
 # The base learning rate, momentum and the weight decay of the network.
 # type: "Adam"
 base_lr: 0.01
 momentum: 0.9
 weight_decay: 0.005
 # The learning rate policy
-# lr_policy: "fixed"
-lr_policy: "step"
+lr_policy: "fixed"
+# lr_policy: "step"
+# lr_policy: "multistep"
 # lr_policy: "multistep"
 gamma: 0.1
-stepsize: 600
+# stepsize: 30
+stepvalue: 60
+# stepsize: 30
 # stepvalue: 24000
 # stepvalue: 4800
 # stepvalue: 7200
@@ -27,10 +29,10 @@ stepsize: 600
 # Display every 200 iterations
 display: 1
 # The maximum number of iterations
-max_iter: 1200
+max_iter: 90
 # snapshot intermediate results
-snapshot_prefix: "examples/csc/mnist_csc_omg_update"
-snapshot: 600
+snapshot_prefix: "examples/mnist_csc/snapshots/balanced_sampler"
+snapshot: 30
 # solver mode: CPU or GPU
 solver_mode: GPU
 # debug_info: true

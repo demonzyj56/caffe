@@ -1,4 +1,4 @@
-name: "mnist_csc"
+name: "mnist_csc_small_context"
 layer {
   name: "mnist"
   type: "Data"
@@ -34,14 +34,26 @@ layer {
   }
 }
 layer {
+    name: "reshape"
+    type: "Python"
+    bottom: "data"
+    top: "reshape"
+    python_param {
+        module: "patch_layer.layer"
+        layer: "CSCPatchLayer"
+        param_str: "{\'patch_size\': 7}"
+    }
+    propagate_down: false
+}
+layer {
   name: "csc"
   type: "CSC"
-  bottom: "data"
+  bottom: "reshape"
   top: "csc"
   csc_param {
     kernel_h: 5
     kernel_w: 5
-    num_output: 100
+    num_output: 256
     admm_max_iter: 1000
     admm_max_rho: 1
     admm_eta: 1.1
@@ -49,20 +61,19 @@ layer {
     lambda2: 1
     verbose: false
     filler {
-        type: "predefined"
-        path: "examples/csc/centroids.binaryproto"
+        type: "xavier"
     }
     boundary: PAD_BOTH
   }
   param { lr_mult: 1 decay_mult: 1 }
   param { lr_mult: 0 decay_mult: 0 }
 }
+
 layer {
   name: "bn"
   type: "BatchNorm"
   bottom: "csc"
   top: "bn"
-  propagate_down: 0
 }
 layer {
   name: "scale"
@@ -86,14 +97,26 @@ layer {
   top: "pool"
   pooling_param {
     pool: MAX
-    kernel_size: 7
-    stride: 7
+    global_pooling: true
   }
 }
 layer {
+    name: "reshape_back"
+    type: "Python"
+    bottom: "pool"
+    top: "reshape_back"
+    python_param {
+        module: "patch_layer.layer"
+        layer: "CSCGatherLayer"
+        param_str: "{\'num_patches_h\': 4, \'num_patches_w\': 4}"
+    }
+}
+
+
+layer {
   name: "ip"
   type: "InnerProduct"
-  bottom: "pool"
+  bottom: "reshape_back"
   top: "ip"
   param {
     lr_mult: 1

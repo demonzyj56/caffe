@@ -1,0 +1,44 @@
+name: "dummy_test_net"
+layer {
+    name: "data"
+    type: "Input"
+    top: "data"
+    input_param {
+        shape {
+            dim: 1
+            dim: 3
+            dim: 32
+            dim: 32
+        }
+    }
+}
+layer {
+    name: "patch"
+    type: "Python"
+    bottom: "data"
+    top: "patch"
+    python_param {
+        module: "patch_layer.layer"
+        layer: "CSCPatchLayer"
+        param_str: "{\'patch_size\': 16}"
+    }
+}
+layer {
+    name: "gather"
+    type: "Python"
+    bottom: "patch"
+    top: "gather"
+    python_param {
+        module: "patch_layer.layer"
+        layer: "CSCGatherLayer"
+        param_str: "{\'num_patches_h\': 2, \'num_patches_w\': 2}"
+    }
+}
+layer {
+    name: "loss"
+    type: "EuclideanLoss"
+    bottom: "data"
+    bottom: "gather"
+    top: "loss"
+}
+
