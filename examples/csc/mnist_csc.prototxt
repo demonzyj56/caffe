@@ -47,22 +47,20 @@ layer {
     admm_eta: 1.1
     lambda1: 0.1
     lambda2: 1
-    verbose: false
+    verbose: true
     filler {
-        type: "predefined"
-        path: "examples/csc/centroids.binaryproto"
+        type: "xavier"
     }
     boundary: PAD_BOTH
   }
-  param { lr_mult: 1 decay_mult: 1 }
-  param { lr_mult: 0 decay_mult: 0 }
+  param { lr_mult: 0 }
+  param { lr_mult: 0 }
 }
 layer {
   name: "bn"
   type: "BatchNorm"
   bottom: "csc"
   top: "bn"
-  propagate_down: 0
 }
 layer {
   name: "scale"

@@ -1,0 +1,478 @@
+I1021 21:33:53.941053 45316 caffe.cpp:218] Using GPUs 1
+I1021 21:34:05.306514 45316 caffe.cpp:223] GPU 1: Tesla M60
+I1021 21:34:05.847662 45316 solver.cpp:44] Initializing solver from parameters: 
+test_iter: 10
+test_interval: 30
+base_lr: 0.01
+display: 1
+max_iter: 1
+lr_policy: "multistep"
+gamma: 0.1
+momentum: 0.9
+weight_decay: 0.005
+snapshot: 10000
+snapshot_prefix: "examples/mnist_csc/snapshots/balanced_sampler"
+solver_mode: GPU
+device_id: 1
+net: "examples/mnist_csc/balanced_sampler.prototxt"
+train_state {
+  level: 0
+  stage: ""
+}
+test_initialization: false
+stepvalue: 60
+I1021 21:34:05.848531 45316 solver.cpp:87] Creating training net from net file: examples/mnist_csc/balanced_sampler.prototxt
+I1021 21:34:05.849023 45316 net.cpp:294] The NetState phase (0) differed from the phase (1) specified by a rule in layer mnist
+I1021 21:34:05.849124 45316 net.cpp:51] Initializing net from parameters: 
+name: "mnist_balanced_sampler"
+state {
+  phase: TRAIN
+  level: 0
+  stage: ""
+}
+layer {
+  name: "mnist"
+  type: "Python"
+  top: "data"
+  top: "label"
+  include {
+    phase: TRAIN
+  }
+  python_param {
+    module: "balanced_sampling_layer.layer"
+    layer: "BalancedSamplingLayer"
+    param_str: "{\'name\': \'mnist\', \'samples_per_class\': 30, \'batch_size\': 100, \'train\': True}"
+  }
+}
+layer {
+  name: "csc"
+  type: "CSC"
+  bottom: "data"
+  top: "csc"
+  param {
+    lr_mult: 1
+    decay_mult: 1
+  }
+  param {
+    lr_mult: 0
+    decay_mult: 0
+  }
+  csc_param {
+    lambda1: 0.1
+    lambda2: 1
+    boundary: PAD_BOTH
+    kernel_h: 15
+    kernel_w: 15
+    num_output: 15
+    admm_max_iter: 1000
+    admm_max_rho: 1
+    admm_eta: 1.1
+    filler {
+      type: "xavier"
+    }
+    verbose: false
+  }
+}
+layer {
+  name: "bn"
+  type: "BatchNorm"
+  bottom: "csc"
+  top: "bn"
+}
+layer {
+  name: "scale"
+  type: "Scale"
+  bottom: "bn"
+  top: "bn"
+  scale_param {
+    bias_term: true
+  }
+}
+layer {
+  name: "relu"
+  type: "ReLU"
+  bottom: "bn"
+  top: "bn"
+}
+layer {
+  name: "pool"
+  type: "Pooling"
+  bottom: "bn"
+  top: "pool"
+  pooling_param {
+    pool: MAX
+    kernel_size: 7
+    stride: 7
+  }
+}
+layer {
+  name: "ip"
+  type: "InnerProduct"
+  bottom: "pool"
+  top: "ip"
+  param {
+    lr_mult: 1
+    decay_mult: 1
+  }
+  param {
+    lr_mult: 2
+    decay_mult: 0
+  }
+  inner_product_param {
+    num_output: 10
+    weight_filler {
+      type: "xavier"
+    }
+    bias_filler {
+      type: "constant"
+    }
+  }
+}
+layer {
+  name: "accuracy"
+  type: "Accuracy"
+  bottom: "ip"
+  bottom: "label"
+  top: "accuracy"
+}
+layer {
+  name: "loss"
+  type: "SoftmaxWithLoss"
+  bottom: "ip"
+  bottom: "label"
+  top: "loss"
+}
+I1021 21:34:05.849231 45316 layer_factory.hpp:77] Creating layer mnist
+I1021 21:34:06.394757 45316 net.cpp:84] Creating Layer mnist
+I1021 21:34:06.394790 45316 net.cpp:380] mnist -> data
+I1021 21:34:06.394815 45316 net.cpp:380] mnist -> label
+I1021 21:34:08.121745 45316 net.cpp:122] Setting up mnist
+I1021 21:34:08.121798 45316 net.cpp:129] Top shape: 100 1 28 28 (78400)
+I1021 21:34:08.121803 45316 net.cpp:129] Top shape: 100 (100)
+I1021 21:34:08.121806 45316 net.cpp:137] Memory required for data: 314000
+I1021 21:34:08.121820 45316 layer_factory.hpp:77] Creating layer label_mnist_1_split
+I1021 21:34:08.121843 45316 net.cpp:84] Creating Layer label_mnist_1_split
+I1021 21:34:08.121873 45316 net.cpp:406] label_mnist_1_split <- label
+I1021 21:34:08.121906 45316 net.cpp:380] label_mnist_1_split -> label_mnist_1_split_0
+I1021 21:34:08.121918 45316 net.cpp:380] label_mnist_1_split -> label_mnist_1_split_1
+I1021 21:34:08.121953 45316 net.cpp:122] Setting up label_mnist_1_split
+I1021 21:34:08.121958 45316 net.cpp:129] Top shape: 100 (100)
+I1021 21:34:08.121963 45316 net.cpp:129] Top shape: 100 (100)
+I1021 21:34:08.121965 45316 net.cpp:137] Memory required for data: 314800
+I1021 21:34:08.121969 45316 layer_factory.hpp:77] Creating layer csc
+I1021 21:34:08.121982 45316 net.cpp:84] Creating Layer csc
+I1021 21:34:08.121986 45316 net.cpp:406] csc <- data
+I1021 21:34:08.121990 45316 net.cpp:380] csc -> csc
+I1021 21:34:08.123221 45316 net.cpp:122] Setting up csc
+I1021 21:34:08.123234 45316 net.cpp:129] Top shape: 100 15 28 28 (1176000)
+I1021 21:34:08.123236 45316 net.cpp:137] Memory required for data: 5018800
+I1021 21:34:08.123301 45316 layer_factory.hpp:77] Creating layer bn
+I1021 21:34:08.123311 45316 net.cpp:84] Creating Layer bn
+I1021 21:34:08.123332 45316 net.cpp:406] bn <- csc
+I1021 21:34:08.123337 45316 net.cpp:380] bn -> bn
+I1021 21:34:08.124228 45316 net.cpp:122] Setting up bn
+I1021 21:34:08.124240 45316 net.cpp:129] Top shape: 100 15 28 28 (1176000)
+I1021 21:34:08.124243 45316 net.cpp:137] Memory required for data: 9722800
+I1021 21:34:08.124254 45316 layer_factory.hpp:77] Creating layer scale
+I1021 21:34:08.124264 45316 net.cpp:84] Creating Layer scale
+I1021 21:34:08.124267 45316 net.cpp:406] scale <- bn
+I1021 21:34:08.124271 45316 net.cpp:367] scale -> bn (in-place)
+I1021 21:34:08.124332 45316 layer_factory.hpp:77] Creating layer scale
+I1021 21:34:08.124439 45316 net.cpp:122] Setting up scale
+I1021 21:34:08.124445 45316 net.cpp:129] Top shape: 100 15 28 28 (1176000)
+I1021 21:34:08.124449 45316 net.cpp:137] Memory required for data: 14426800
+I1021 21:34:08.124454 45316 layer_factory.hpp:77] Creating layer relu
+I1021 21:34:08.124464 45316 net.cpp:84] Creating Layer relu
+I1021 21:34:08.124485 45316 net.cpp:406] relu <- bn
+I1021 21:34:08.124490 45316 net.cpp:367] relu -> bn (in-place)
+I1021 21:34:08.388685 45316 net.cpp:122] Setting up relu
+I1021 21:34:08.388723 45316 net.cpp:129] Top shape: 100 15 28 28 (1176000)
+I1021 21:34:08.388727 45316 net.cpp:137] Memory required for data: 19130800
+I1021 21:34:08.388734 45316 layer_factory.hpp:77] Creating layer pool
+I1021 21:34:08.388752 45316 net.cpp:84] Creating Layer pool
+I1021 21:34:08.388756 45316 net.cpp:406] pool <- bn
+I1021 21:34:08.388764 45316 net.cpp:380] pool -> pool
+I1021 21:34:08.388866 45316 net.cpp:122] Setting up pool
+I1021 21:34:08.388873 45316 net.cpp:129] Top shape: 100 15 4 4 (24000)
+I1021 21:34:08.388876 45316 net.cpp:137] Memory required for data: 19226800
+I1021 21:34:08.388881 45316 layer_factory.hpp:77] Creating layer ip
+I1021 21:34:08.388909 45316 net.cpp:84] Creating Layer ip
+I1021 21:34:08.388912 45316 net.cpp:406] ip <- pool
+I1021 21:34:08.388917 45316 net.cpp:380] ip -> ip
+I1021 21:34:08.389040 45316 net.cpp:122] Setting up ip
+I1021 21:34:08.389047 45316 net.cpp:129] Top shape: 100 10 (1000)
+I1021 21:34:08.389050 45316 net.cpp:137] Memory required for data: 19230800
+I1021 21:34:08.389063 45316 layer_factory.hpp:77] Creating layer ip_ip_0_split
+I1021 21:34:08.389072 45316 net.cpp:84] Creating Layer ip_ip_0_split
+I1021 21:34:08.389075 45316 net.cpp:406] ip_ip_0_split <- ip
+I1021 21:34:08.389081 45316 net.cpp:380] ip_ip_0_split -> ip_ip_0_split_0
+I1021 21:34:08.389086 45316 net.cpp:380] ip_ip_0_split -> ip_ip_0_split_1
+I1021 21:34:08.389119 45316 net.cpp:122] Setting up ip_ip_0_split
+I1021 21:34:08.389125 45316 net.cpp:129] Top shape: 100 10 (1000)
+I1021 21:34:08.389129 45316 net.cpp:129] Top shape: 100 10 (1000)
+I1021 21:34:08.389132 45316 net.cpp:137] Memory required for data: 19238800
+I1021 21:34:08.389135 45316 layer_factory.hpp:77] Creating layer accuracy
+I1021 21:34:08.389143 45316 net.cpp:84] Creating Layer accuracy
+I1021 21:34:08.389148 45316 net.cpp:406] accuracy <- ip_ip_0_split_0
+I1021 21:34:08.389152 45316 net.cpp:406] accuracy <- label_mnist_1_split_0
+I1021 21:34:08.389156 45316 net.cpp:380] accuracy -> accuracy
+I1021 21:34:08.389165 45316 net.cpp:122] Setting up accuracy
+I1021 21:34:08.389170 45316 net.cpp:129] Top shape: (1)
+I1021 21:34:08.389173 45316 net.cpp:137] Memory required for data: 19238804
+I1021 21:34:08.389175 45316 layer_factory.hpp:77] Creating layer loss
+I1021 21:34:08.389183 45316 net.cpp:84] Creating Layer loss
+I1021 21:34:08.389186 45316 net.cpp:406] loss <- ip_ip_0_split_1
+I1021 21:34:08.389190 45316 net.cpp:406] loss <- label_mnist_1_split_1
+I1021 21:34:08.389194 45316 net.cpp:380] loss -> loss
+I1021 21:34:08.389209 45316 layer_factory.hpp:77] Creating layer loss
+I1021 21:34:08.389906 45316 net.cpp:122] Setting up loss
+I1021 21:34:08.389919 45316 net.cpp:129] Top shape: (1)
+I1021 21:34:08.389922 45316 net.cpp:132]     with loss weight 1
+I1021 21:34:08.389948 45316 net.cpp:137] Memory required for data: 19238808
+I1021 21:34:08.389971 45316 net.cpp:198] loss needs backward computation.
+I1021 21:34:08.389978 45316 net.cpp:200] accuracy does not need backward computation.
+I1021 21:34:08.389983 45316 net.cpp:198] ip_ip_0_split needs backward computation.
+I1021 21:34:08.389986 45316 net.cpp:198] ip needs backward computation.
+I1021 21:34:08.389991 45316 net.cpp:198] pool needs backward computation.
+I1021 21:34:08.389992 45316 net.cpp:198] relu needs backward computation.
+I1021 21:34:08.389995 45316 net.cpp:198] scale needs backward computation.
+I1021 21:34:08.389998 45316 net.cpp:198] bn needs backward computation.
+I1021 21:34:08.390002 45316 net.cpp:198] csc needs backward computation.
+I1021 21:34:08.390007 45316 net.cpp:200] label_mnist_1_split does not need backward computation.
+I1021 21:34:08.390009 45316 net.cpp:200] mnist does not need backward computation.
+I1021 21:34:08.390012 45316 net.cpp:242] This network produces output accuracy
+I1021 21:34:08.390017 45316 net.cpp:242] This network produces output loss
+I1021 21:34:08.390025 45316 net.cpp:255] Network initialization done.
+I1021 21:34:08.390331 45316 solver.cpp:172] Creating test net (#0) specified by net file: examples/mnist_csc/balanced_sampler.prototxt
+I1021 21:34:08.390355 45316 net.cpp:294] The NetState phase (1) differed from the phase (0) specified by a rule in layer mnist
+I1021 21:34:08.390455 45316 net.cpp:51] Initializing net from parameters: 
+name: "mnist_balanced_sampler"
+state {
+  phase: TEST
+}
+layer {
+  name: "mnist"
+  type: "Python"
+  top: "data"
+  top: "label"
+  include {
+    phase: TEST
+  }
+  python_param {
+    module: "balanced_sampling_layer.layer"
+    layer: "BalancedSamplingLayer"
+    param_str: "{\'name\': \'mnist\', \'samples_per_class\': 100, \'batch_size\': 100, \'train\': False}"
+  }
+}
+layer {
+  name: "csc"
+  type: "CSC"
+  bottom: "data"
+  top: "csc"
+  param {
+    lr_mult: 1
+    decay_mult: 1
+  }
+  param {
+    lr_mult: 0
+    decay_mult: 0
+  }
+  csc_param {
+    lambda1: 0.1
+    lambda2: 1
+    boundary: PAD_BOTH
+    kernel_h: 15
+    kernel_w: 15
+    num_output: 15
+    admm_max_iter: 1000
+    admm_max_rho: 1
+    admm_eta: 1.1
+    filler {
+      type: "xavier"
+    }
+    verbose: false
+  }
+}
+layer {
+  name: "bn"
+  type: "BatchNorm"
+  bottom: "csc"
+  top: "bn"
+}
+layer {
+  name: "scale"
+  type: "Scale"
+  bottom: "bn"
+  top: "bn"
+  scale_param {
+    bias_term: true
+  }
+}
+layer {
+  name: "relu"
+  type: "ReLU"
+  bottom: "bn"
+  top: "bn"
+}
+layer {
+  name: "pool"
+  type: "Pooling"
+  bottom: "bn"
+  top: "pool"
+  pooling_param {
+    pool: MAX
+    kernel_size: 7
+    stride: 7
+  }
+}
+layer {
+  name: "ip"
+  type: "InnerProduct"
+  bottom: "pool"
+  top: "ip"
+  param {
+    lr_mult: 1
+    decay_mult: 1
+  }
+  param {
+    lr_mult: 2
+    decay_mult: 0
+  }
+  inner_product_param {
+    num_output: 10
+    weight_filler {
+      type: "xavier"
+    }
+    bias_filler {
+      type: "constant"
+    }
+  }
+}
+layer {
+  name: "accuracy"
+  type: "Accuracy"
+  bottom: "ip"
+  bottom: "label"
+  top: "accuracy"
+}
+layer {
+  name: "loss"
+  type: "SoftmaxWithLoss"
+  bottom: "ip"
+  bottom: "label"
+  top: "loss"
+}
+I1021 21:34:08.390507 45316 layer_factory.hpp:77] Creating layer mnist
+I1021 21:34:08.390578 45316 net.cpp:84] Creating Layer mnist
+I1021 21:34:08.390585 45316 net.cpp:380] mnist -> data
+I1021 21:34:08.390594 45316 net.cpp:380] mnist -> label
+I1021 21:34:08.422533 45316 net.cpp:122] Setting up mnist
+I1021 21:34:08.422590 45316 net.cpp:129] Top shape: 100 1 28 28 (78400)
+I1021 21:34:08.422596 45316 net.cpp:129] Top shape: 100 (100)
+I1021 21:34:08.422600 45316 net.cpp:137] Memory required for data: 314000
+I1021 21:34:08.422607 45316 layer_factory.hpp:77] Creating layer label_mnist_1_split
+I1021 21:34:08.422621 45316 net.cpp:84] Creating Layer label_mnist_1_split
+I1021 21:34:08.422626 45316 net.cpp:406] label_mnist_1_split <- label
+I1021 21:34:08.422632 45316 net.cpp:380] label_mnist_1_split -> label_mnist_1_split_0
+I1021 21:34:08.422643 45316 net.cpp:380] label_mnist_1_split -> label_mnist_1_split_1
+I1021 21:34:08.422695 45316 net.cpp:122] Setting up label_mnist_1_split
+I1021 21:34:08.422727 45316 net.cpp:129] Top shape: 100 (100)
+I1021 21:34:08.422734 45316 net.cpp:129] Top shape: 100 (100)
+I1021 21:34:08.422735 45316 net.cpp:137] Memory required for data: 314800
+I1021 21:34:08.422739 45316 layer_factory.hpp:77] Creating layer csc
+I1021 21:34:08.422749 45316 net.cpp:84] Creating Layer csc
+I1021 21:34:08.422750 45316 net.cpp:406] csc <- data
+I1021 21:34:08.422755 45316 net.cpp:380] csc -> csc
+I1021 21:34:08.422915 45316 net.cpp:122] Setting up csc
+I1021 21:34:08.422924 45316 net.cpp:129] Top shape: 100 15 28 28 (1176000)
+I1021 21:34:08.422927 45316 net.cpp:137] Memory required for data: 5018800
+I1021 21:34:08.422936 45316 layer_factory.hpp:77] Creating layer bn
+I1021 21:34:08.422943 45316 net.cpp:84] Creating Layer bn
+I1021 21:34:08.422946 45316 net.cpp:406] bn <- csc
+I1021 21:34:08.422951 45316 net.cpp:380] bn -> bn
+I1021 21:34:08.423125 45316 net.cpp:122] Setting up bn
+I1021 21:34:08.423132 45316 net.cpp:129] Top shape: 100 15 28 28 (1176000)
+I1021 21:34:08.423136 45316 net.cpp:137] Memory required for data: 9722800
+I1021 21:34:08.423146 45316 layer_factory.hpp:77] Creating layer scale
+I1021 21:34:08.423153 45316 net.cpp:84] Creating Layer scale
+I1021 21:34:08.423157 45316 net.cpp:406] scale <- bn
+I1021 21:34:08.423161 45316 net.cpp:367] scale -> bn (in-place)
+I1021 21:34:08.423198 45316 layer_factory.hpp:77] Creating layer scale
+I1021 21:34:08.423293 45316 net.cpp:122] Setting up scale
+I1021 21:34:08.423300 45316 net.cpp:129] Top shape: 100 15 28 28 (1176000)
+I1021 21:34:08.423303 45316 net.cpp:137] Memory required for data: 14426800
+I1021 21:34:08.423310 45316 layer_factory.hpp:77] Creating layer relu
+I1021 21:34:08.423316 45316 net.cpp:84] Creating Layer relu
+I1021 21:34:08.423321 45316 net.cpp:406] relu <- bn
+I1021 21:34:08.423323 45316 net.cpp:367] relu -> bn (in-place)
+I1021 21:34:08.423647 45316 net.cpp:122] Setting up relu
+I1021 21:34:08.423656 45316 net.cpp:129] Top shape: 100 15 28 28 (1176000)
+I1021 21:34:08.423660 45316 net.cpp:137] Memory required for data: 19130800
+I1021 21:34:08.423681 45316 layer_factory.hpp:77] Creating layer pool
+I1021 21:34:08.423686 45316 net.cpp:84] Creating Layer pool
+I1021 21:34:08.423689 45316 net.cpp:406] pool <- bn
+I1021 21:34:08.423696 45316 net.cpp:380] pool -> pool
+I1021 21:34:08.423732 45316 net.cpp:122] Setting up pool
+I1021 21:34:08.423738 45316 net.cpp:129] Top shape: 100 15 4 4 (24000)
+I1021 21:34:08.423739 45316 net.cpp:137] Memory required for data: 19226800
+I1021 21:34:08.423743 45316 layer_factory.hpp:77] Creating layer ip
+I1021 21:34:08.423753 45316 net.cpp:84] Creating Layer ip
+I1021 21:34:08.423773 45316 net.cpp:406] ip <- pool
+I1021 21:34:08.423777 45316 net.cpp:380] ip -> ip
+I1021 21:34:08.423887 45316 net.cpp:122] Setting up ip
+I1021 21:34:08.423892 45316 net.cpp:129] Top shape: 100 10 (1000)
+I1021 21:34:08.423894 45316 net.cpp:137] Memory required for data: 19230800
+I1021 21:34:08.423904 45316 layer_factory.hpp:77] Creating layer ip_ip_0_split
+I1021 21:34:08.423912 45316 net.cpp:84] Creating Layer ip_ip_0_split
+I1021 21:34:08.423915 45316 net.cpp:406] ip_ip_0_split <- ip
+I1021 21:34:08.423920 45316 net.cpp:380] ip_ip_0_split -> ip_ip_0_split_0
+I1021 21:34:08.423928 45316 net.cpp:380] ip_ip_0_split -> ip_ip_0_split_1
+I1021 21:34:08.423957 45316 net.cpp:122] Setting up ip_ip_0_split
+I1021 21:34:08.423962 45316 net.cpp:129] Top shape: 100 10 (1000)
+I1021 21:34:08.423967 45316 net.cpp:129] Top shape: 100 10 (1000)
+I1021 21:34:08.423969 45316 net.cpp:137] Memory required for data: 19238800
+I1021 21:34:08.423972 45316 layer_factory.hpp:77] Creating layer accuracy
+I1021 21:34:08.423977 45316 net.cpp:84] Creating Layer accuracy
+I1021 21:34:08.423981 45316 net.cpp:406] accuracy <- ip_ip_0_split_0
+I1021 21:34:08.423985 45316 net.cpp:406] accuracy <- label_mnist_1_split_0
+I1021 21:34:08.423990 45316 net.cpp:380] accuracy -> accuracy
+I1021 21:34:08.423996 45316 net.cpp:122] Setting up accuracy
+I1021 21:34:08.424000 45316 net.cpp:129] Top shape: (1)
+I1021 21:34:08.424003 45316 net.cpp:137] Memory required for data: 19238804
+I1021 21:34:08.424016 45316 layer_factory.hpp:77] Creating layer loss
+I1021 21:34:08.424023 45316 net.cpp:84] Creating Layer loss
+I1021 21:34:08.424027 45316 net.cpp:406] loss <- ip_ip_0_split_1
+I1021 21:34:08.424031 45316 net.cpp:406] loss <- label_mnist_1_split_1
+I1021 21:34:08.424036 45316 net.cpp:380] loss -> loss
+I1021 21:34:08.424043 45316 layer_factory.hpp:77] Creating layer loss
+I1021 21:34:08.424854 45316 net.cpp:122] Setting up loss
+I1021 21:34:08.424867 45316 net.cpp:129] Top shape: (1)
+I1021 21:34:08.424872 45316 net.cpp:132]     with loss weight 1
+I1021 21:34:08.424883 45316 net.cpp:137] Memory required for data: 19238808
+I1021 21:34:08.424886 45316 net.cpp:198] loss needs backward computation.
+I1021 21:34:08.424892 45316 net.cpp:200] accuracy does not need backward computation.
+I1021 21:34:08.424896 45316 net.cpp:198] ip_ip_0_split needs backward computation.
+I1021 21:34:08.424916 45316 net.cpp:198] ip needs backward computation.
+I1021 21:34:08.424918 45316 net.cpp:198] pool needs backward computation.
+I1021 21:34:08.424921 45316 net.cpp:198] relu needs backward computation.
+I1021 21:34:08.424924 45316 net.cpp:198] scale needs backward computation.
+I1021 21:34:08.424926 45316 net.cpp:198] bn needs backward computation.
+I1021 21:34:08.424929 45316 net.cpp:198] csc needs backward computation.
+I1021 21:34:08.424932 45316 net.cpp:200] label_mnist_1_split does not need backward computation.
+I1021 21:34:08.424935 45316 net.cpp:200] mnist does not need backward computation.
+I1021 21:34:08.424938 45316 net.cpp:242] This network produces output accuracy
+I1021 21:34:08.424942 45316 net.cpp:242] This network produces output loss
+I1021 21:34:08.424950 45316 net.cpp:255] Network initialization done.
+I1021 21:34:08.424991 45316 solver.cpp:56] Solver scaffolding done.
+I1021 21:34:08.425235 45316 caffe.cpp:248] Starting Optimization
+I1021 21:34:08.425245 45316 solver.cpp:272] Solving mnist_balanced_sampler
+I1021 21:34:08.425247 45316 solver.cpp:273] Learning Rate Policy: multistep
+I1021 21:34:39.877902 45316 solver.cpp:218] Iteration 0 (-3.91176e-10 iter/s, 31.4525s/1 iters), loss = 4.24836
+I1021 21:34:39.877998 45316 solver.cpp:237]     Train net output #0: accuracy = 0.02
+I1021 21:34:39.878012 45316 solver.cpp:237]     Train net output #1: loss = 4.24836 (* 1 = 4.24836 loss)
+I1021 21:34:39.878026 45316 sgd_solver.cpp:105] Iteration 0, lr = 0.01
+I1021 21:34:39.878499 45316 solver.cpp:447] Snapshotting to binary proto file examples/mnist_csc/snapshots/balanced_sampler_iter_1.caffemodel
+I1021 21:34:39.879312 45316 sgd_solver.cpp:273] Snapshotting solver state to binary proto file examples/mnist_csc/snapshots/balanced_sampler_iter_1.solverstate
+I1021 21:34:40.338766 45316 solver.cpp:310] Iteration 1, loss = 4.00847
+I1021 21:34:40.338781 45316 solver.cpp:315] Optimization Done.
+I1021 21:34:40.338786 45316 caffe.cpp:259] Optimization Done.

@@ -2,8 +2,8 @@
 samples in each class. """
 import os
 import numpy as np
+import skimage.transform as skt
 import caffe
-import torch
 from torchvision import datasets, transforms
 
 
@@ -30,15 +30,19 @@ def sample_mnist(samples_per_class, train=True):
     return sampled_data, sampled_labels
 
 
-def sample_cifar10(samples_per_class, train=True):
-    """ Sample CIFAR10. """
+def sample_cifar10(samples_per_class, train=True, grayscale=True):
+    """ Sample CIFAR10. Notice we transfer cifar10 to grayscale image. """
     cifar10 = datasets.CIFAR10(__default_data_path, train=train, download=True,
                                transform=transforms.Compose([
                                    transforms.ToTensor()
                                ]))
-    data = cifar10.train_data.astype(np.float64, copy=False) if train \
-        else cifar10.test_data.astype(np.float64, copy=False)
-    data = data.transpose((0, 3, 1, 2)) / 255.0
+    data = cifar10.train_data.astype(np.float64, copy=False) / 255.0 if train \
+        else cifar10.test_data.astype(np.float64, copy=False) / 255.0
+    data = data.transpose((0, 3, 1, 2))
+    if grayscale:
+        data = data[:, 0, :, :] * 0.2989 + data[:, 1, :, :] * 0.5870 + \
+            data[:, 2, :, :] * 0.1140
+        data = np.expand_dims(data, axis=1)
     labels = cifar10.train_labels if train else cifar10.test_labels
     labels = np.array(labels)
     sampled_data, sampled_labels = [], []
@@ -54,6 +58,19 @@ def sample_cifar10(samples_per_class, train=True):
     return sampled_data, sampled_labels
 
 
+def resize_and_random_crop(img, sz):
+    """ Resize the given image into sz, but then randomly crop to
+    the original position.
+    The input image img is is of order (H, W, C) with values as
+    uint8 (0-255) or float (0-1)."""
+    if img.shape[0] >= sz[0] or img.shape[1] >= sz[1]:
+        return img
+    resized = skt.resize(img, sz)
+    r = np.random.randint(0, sz[0]-img.shape[0])
+    c = np.random.randint(0, sz[1]-img.shape[1])
+    return resized[r:r+img.shape[0], c:c+img.shape[1], :]
+
+
 class BalancedSamplingLayer(caffe.Layer):
     """ Sample the target dataset according to samples per class. """
 
@@ -65,6 +82,7 @@ class BalancedSamplingLayer(caffe.Layer):
         params = eval(self.param_str)
         self.dataset_name = str(params['name'])
         self.batch_size = int(params['batch_size'])
+        self.crop = params.get('crop', False)
         if self.dataset_name == 'mnist':
             self.data, self.labels = sample_mnist(int(params['samples_per_class']),
                                                   train=bool(params['train']))
@@ -81,6 +99,8 @@ class BalancedSamplingLayer(caffe.Layer):
         self.perm = np.random.permutation(len(self.labels))
         self.cur_idx = 0
         top[0].reshape(self.batch_size, *self.data.shape[1:])
+        #  top[0].reshape(self.batch_size, self.data.shape[-1], self.data.shape[1],
+        #                 self.data.shape[2])
         top[1].reshape(self.batch_size)
 
     def reshape(self, bottom, top):
@@ -90,11 +110,20 @@ class BalancedSamplingLayer(caffe.Layer):
             self.perm = np.random.permutation(len(self.labels))
         batch_size = min(self.batch_size, len(self.labels) - self.cur_idx)
         top[0].reshape(batch_size, *self.data.shape[1:])
+        #  top[0].reshape(self.batch_size, self.data.shape[-1], self.data.shape[1],
+        #                 self.data.shape[2])
         top[1].reshape(batch_size)
 
     def forward(self, bottom, top):
         """ Samples a batch from data and sample. """
         batch_size = min(self.batch_size, len(self.labels) - self.cur_idx)
+        #  input_data = self.data[self.perm[self.cur_idx:self.cur_idx+batch_size], :, :, :]
+        #  if self.crop:
+        #      input_data = [resize_and_random_crop(input_data[i], self.crop)[np.newaxis, :, :, :]
+        #                    for i in range(batch_size)]
+        #      input_data = np.concatenate(input_data, axis=0)
+        #  input_data = input_data.transpose((0, 3, 1, 2))
+        #  top[0].data[...] = input_data
         top[0].data[...] = self.data[self.perm[self.cur_idx:self.cur_idx+batch_size], :, :, :]
         top[1].data[...] = self.labels[self.perm[self.cur_idx:self.cur_idx+batch_size]]
         self.cur_idx += batch_size

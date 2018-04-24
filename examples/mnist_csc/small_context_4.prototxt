@@ -1,4 +1,4 @@
-name: "mnist_csc"
+name: "mnist_csc_small_context_4"
 layer {
   name: "mnist"
   type: "Data"
@@ -34,15 +34,26 @@ layer {
   }
 }
 layer {
+    name: "reshape"
+    type: "Python"
+    bottom: "data"
+    top: "reshape"
+    python_param {
+        module: "patch_layer.layer"
+        layer: "CSCPatchLayer"
+        param_str: "{\'patch_size\': 7}"
+    }
+}
+layer {
   name: "csc"
   type: "CSC"
-  bottom: "data"
+  bottom: "reshape"
   top: "csc"
   csc_param {
     kernel_h: 5
     kernel_w: 5
-    num_output: 128
-    admm_max_iter: 1000
+    num_output: 100
+    admm_max_iter: 10
     admm_max_rho: 1
     admm_eta: 1.1
     lambda1: 0.1
@@ -56,10 +67,33 @@ layer {
   param { lr_mult: 1 }
   param { lr_mult: 0 }
 }
+
+layer {
+  name: "pool"
+  type: "Pooling"
+  bottom: "csc"
+  top: "pool"
+  pooling_param {
+    pool: MAX
+    global_pooling: true
+  }
+}
+layer {
+    name: "reshape_back"
+    type: "Python"
+    bottom: "pool"
+    top: "reshape_back"
+    python_param {
+        module: "patch_layer.layer"
+        layer: "CSCGatherLayer"
+        param_str: "{\'num_patches_h\': 4, \'num_patches_w\': 4}"
+    }
+}
+
 layer {
   name: "bn"
   type: "BatchNorm"
-  bottom: "csc"
+  bottom: "reshape_back"
   top: "bn"
 }
 layer {
@@ -77,21 +111,11 @@ layer {
   bottom: "bn"
   top: "bn"
 }
-layer {
-  name: "pool"
-  type: "Pooling"
-  bottom: "bn"
-  top: "pool"
-  pooling_param {
-    pool: MAX
-    kernel_size: 7
-    stride: 7
-  }
-}
+
 layer {
   name: "ip"
   type: "InnerProduct"
-  bottom: "pool"
+  bottom: "bn"
   top: "ip"
   param {
     lr_mult: 1

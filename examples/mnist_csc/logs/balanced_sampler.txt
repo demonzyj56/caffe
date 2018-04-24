@@ -1,0 +1,409 @@
+I1021 13:01:20.865525 34444 caffe.cpp:218] Using GPUs 2
+I1021 13:01:20.919785 34444 caffe.cpp:223] GPU 2: Tesla M60
+I1021 13:01:21.507467 34444 solver.cpp:44] Initializing solver from parameters: 
+test_iter: 10
+test_interval: 30
+base_lr: 0.01
+display: 1
+max_iter: 90
+lr_policy: "fixed"
+gamma: 0.1
+momentum: 0.9
+weight_decay: 0.005
+stepsize: 30
+snapshot: 30
+snapshot_prefix: "examples/mnist_csc/snapshots/balanced_sampler"
+solver_mode: GPU
+device_id: 2
+net: "examples/mnist_csc/balanced_sampler.prototxt"
+train_state {
+  level: 0
+  stage: ""
+}
+test_initialization: false
+I1021 13:01:21.508234 34444 solver.cpp:87] Creating training net from net file: examples/mnist_csc/balanced_sampler.prototxt
+I1021 13:01:21.508540 34444 net.cpp:294] The NetState phase (0) differed from the phase (1) specified by a rule in layer mnist
+I1021 13:01:21.508620 34444 net.cpp:51] Initializing net from parameters: 
+name: "mnist_balanced_sampler"
+state {
+  phase: TRAIN
+  level: 0
+  stage: ""
+}
+layer {
+  name: "mnist"
+  type: "Python"
+  top: "data"
+  top: "label"
+  include {
+    phase: TRAIN
+  }
+  python_param {
+    module: "balanced_sampling_layer.layer"
+    layer: "BalancedSamplingLayer"
+    param_str: "{\'name\': \'mnist\', \'samples_per_class\': 30, \'batch_size\': 100, \'train\': True}"
+  }
+}
+layer {
+  name: "csc"
+  type: "CSC"
+  bottom: "data"
+  top: "csc"
+  param {
+    lr_mult: 1
+    decay_mult: 1
+  }
+  param {
+    lr_mult: 0
+    decay_mult: 0
+  }
+  csc_param {
+    lambda1: 0.1
+    lambda2: 1
+    boundary: PAD_BOTH
+    kernel_h: 15
+    kernel_w: 15
+    num_output: 15
+    admm_max_iter: 1000
+    admm_max_rho: 1
+    admm_eta: 1.1
+    filler {
+      type: "xavier"
+    }
+    verbose: false
+  }
+}
+layer {
+  name: "pool"
+  type: "Pooling"
+  bottom: "csc"
+  top: "pool"
+  pooling_param {
+    pool: MAX
+    kernel_size: 7
+    stride: 7
+  }
+}
+layer {
+  name: "ip"
+  type: "InnerProduct"
+  bottom: "pool"
+  top: "ip"
+  param {
+    lr_mult: 1
+    decay_mult: 1
+  }
+  param {
+    lr_mult: 2
+    decay_mult: 0
+  }
+  inner_product_param {
+    num_output: 10
+    weight_filler {
+      type: "xavier"
+    }
+    bias_filler {
+      type: "constant"
+    }
+  }
+}
+layer {
+  name: "accuracy"
+  type: "Accuracy"
+  bottom: "ip"
+  bottom: "label"
+  top: "accuracy"
+}
+layer {
+  name: "loss"
+  type: "SoftmaxWithLoss"
+  bottom: "ip"
+  bottom: "label"
+  top: "loss"
+}
+I1021 13:01:21.508730 34444 layer_factory.hpp:77] Creating layer mnist
+I1021 13:01:22.087285 34444 net.cpp:84] Creating Layer mnist
+I1021 13:01:22.087342 34444 net.cpp:380] mnist -> data
+I1021 13:01:22.087368 34444 net.cpp:380] mnist -> label
+I1021 13:01:23.864507 34444 net.cpp:122] Setting up mnist
+I1021 13:01:23.864596 34444 net.cpp:129] Top shape: 100 1 28 28 (78400)
+I1021 13:01:23.864603 34444 net.cpp:129] Top shape: 100 (100)
+I1021 13:01:23.864608 34444 net.cpp:137] Memory required for data: 314000
+I1021 13:01:23.864629 34444 layer_factory.hpp:77] Creating layer label_mnist_1_split
+I1021 13:01:23.864701 34444 net.cpp:84] Creating Layer label_mnist_1_split
+I1021 13:01:23.864725 34444 net.cpp:406] label_mnist_1_split <- label
+I1021 13:01:23.864744 34444 net.cpp:380] label_mnist_1_split -> label_mnist_1_split_0
+I1021 13:01:23.864758 34444 net.cpp:380] label_mnist_1_split -> label_mnist_1_split_1
+I1021 13:01:23.864794 34444 net.cpp:122] Setting up label_mnist_1_split
+I1021 13:01:23.864801 34444 net.cpp:129] Top shape: 100 (100)
+I1021 13:01:23.864805 34444 net.cpp:129] Top shape: 100 (100)
+I1021 13:01:23.864809 34444 net.cpp:137] Memory required for data: 314800
+I1021 13:01:23.864811 34444 layer_factory.hpp:77] Creating layer csc
+I1021 13:01:23.864831 34444 net.cpp:84] Creating Layer csc
+I1021 13:01:23.864836 34444 net.cpp:406] csc <- data
+I1021 13:01:23.864841 34444 net.cpp:380] csc -> csc
+I1021 13:01:23.866124 34444 net.cpp:122] Setting up csc
+I1021 13:01:23.866137 34444 net.cpp:129] Top shape: 100 15 28 28 (1176000)
+I1021 13:01:23.866140 34444 net.cpp:137] Memory required for data: 5018800
+I1021 13:01:23.866158 34444 layer_factory.hpp:77] Creating layer pool
+I1021 13:01:23.866173 34444 net.cpp:84] Creating Layer pool
+I1021 13:01:23.866178 34444 net.cpp:406] pool <- csc
+I1021 13:01:23.866181 34444 net.cpp:380] pool -> pool
+I1021 13:01:23.866245 34444 net.cpp:122] Setting up pool
+I1021 13:01:23.866253 34444 net.cpp:129] Top shape: 100 15 4 4 (24000)
+I1021 13:01:23.866256 34444 net.cpp:137] Memory required for data: 5114800
+I1021 13:01:23.866261 34444 layer_factory.hpp:77] Creating layer ip
+I1021 13:01:23.866276 34444 net.cpp:84] Creating Layer ip
+I1021 13:01:23.866281 34444 net.cpp:406] ip <- pool
+I1021 13:01:23.866286 34444 net.cpp:380] ip -> ip
+I1021 13:01:23.866386 34444 net.cpp:122] Setting up ip
+I1021 13:01:23.866394 34444 net.cpp:129] Top shape: 100 10 (1000)
+I1021 13:01:23.866397 34444 net.cpp:137] Memory required for data: 5118800
+I1021 13:01:23.866405 34444 layer_factory.hpp:77] Creating layer ip_ip_0_split
+I1021 13:01:23.866410 34444 net.cpp:84] Creating Layer ip_ip_0_split
+I1021 13:01:23.866423 34444 net.cpp:406] ip_ip_0_split <- ip
+I1021 13:01:23.866428 34444 net.cpp:380] ip_ip_0_split -> ip_ip_0_split_0
+I1021 13:01:23.866433 34444 net.cpp:380] ip_ip_0_split -> ip_ip_0_split_1
+I1021 13:01:23.866464 34444 net.cpp:122] Setting up ip_ip_0_split
+I1021 13:01:23.866469 34444 net.cpp:129] Top shape: 100 10 (1000)
+I1021 13:01:23.866474 34444 net.cpp:129] Top shape: 100 10 (1000)
+I1021 13:01:23.866477 34444 net.cpp:137] Memory required for data: 5126800
+I1021 13:01:23.866479 34444 layer_factory.hpp:77] Creating layer accuracy
+I1021 13:01:23.866485 34444 net.cpp:84] Creating Layer accuracy
+I1021 13:01:23.866489 34444 net.cpp:406] accuracy <- ip_ip_0_split_0
+I1021 13:01:23.866492 34444 net.cpp:406] accuracy <- label_mnist_1_split_0
+I1021 13:01:23.866497 34444 net.cpp:380] accuracy -> accuracy
+I1021 13:01:23.866513 34444 net.cpp:122] Setting up accuracy
+I1021 13:01:23.866518 34444 net.cpp:129] Top shape: (1)
+I1021 13:01:23.866520 34444 net.cpp:137] Memory required for data: 5126804
+I1021 13:01:23.866523 34444 layer_factory.hpp:77] Creating layer loss
+I1021 13:01:23.866529 34444 net.cpp:84] Creating Layer loss
+I1021 13:01:23.866533 34444 net.cpp:406] loss <- ip_ip_0_split_1
+I1021 13:01:23.866538 34444 net.cpp:406] loss <- label_mnist_1_split_1
+I1021 13:01:23.866540 34444 net.cpp:380] loss -> loss
+I1021 13:01:23.866554 34444 layer_factory.hpp:77] Creating layer loss
+I1021 13:01:24.145637 34444 net.cpp:122] Setting up loss
+I1021 13:01:24.145691 34444 net.cpp:129] Top shape: (1)
+I1021 13:01:24.145696 34444 net.cpp:132]     with loss weight 1
+I1021 13:01:24.145725 34444 net.cpp:137] Memory required for data: 5126808
+I1021 13:01:24.145730 34444 net.cpp:198] loss needs backward computation.
+I1021 13:01:24.145737 34444 net.cpp:200] accuracy does not need backward computation.
+I1021 13:01:24.145743 34444 net.cpp:198] ip_ip_0_split needs backward computation.
+I1021 13:01:24.145747 34444 net.cpp:198] ip needs backward computation.
+I1021 13:01:24.145751 34444 net.cpp:198] pool needs backward computation.
+I1021 13:01:24.145754 34444 net.cpp:198] csc needs backward computation.
+I1021 13:01:24.145758 34444 net.cpp:200] label_mnist_1_split does not need backward computation.
+I1021 13:01:24.145762 34444 net.cpp:200] mnist does not need backward computation.
+I1021 13:01:24.145766 34444 net.cpp:242] This network produces output accuracy
+I1021 13:01:24.145771 34444 net.cpp:242] This network produces output loss
+I1021 13:01:24.145781 34444 net.cpp:255] Network initialization done.
+I1021 13:01:24.146257 34444 solver.cpp:172] Creating test net (#0) specified by net file: examples/mnist_csc/balanced_sampler.prototxt
+I1021 13:01:24.146301 34444 net.cpp:294] The NetState phase (1) differed from the phase (0) specified by a rule in layer mnist
+I1021 13:01:24.146378 34444 net.cpp:51] Initializing net from parameters: 
+name: "mnist_balanced_sampler"
+state {
+  phase: TEST
+}
+layer {
+  name: "mnist"
+  type: "Python"
+  top: "data"
+  top: "label"
+  include {
+    phase: TEST
+  }
+  python_param {
+    module: "balanced_sampling_layer.layer"
+    layer: "BalancedSamplingLayer"
+    param_str: "{\'name\': \'mnist\', \'samples_per_class\': 100, \'batch_size\': 100, \'train\': False}"
+  }
+}
+layer {
+  name: "csc"
+  type: "CSC"
+  bottom: "data"
+  top: "csc"
+  param {
+    lr_mult: 1
+    decay_mult: 1
+  }
+  param {
+    lr_mult: 0
+    decay_mult: 0
+  }
+  csc_param {
+    lambda1: 0.1
+    lambda2: 1
+    boundary: PAD_BOTH
+    kernel_h: 15
+    kernel_w: 15
+    num_output: 15
+    admm_max_iter: 1000
+    admm_max_rho: 1
+    admm_eta: 1.1
+    filler {
+      type: "xavier"
+    }
+    verbose: false
+  }
+}
+layer {
+  name: "pool"
+  type: "Pooling"
+  bottom: "csc"
+  top: "pool"
+  pooling_param {
+    pool: MAX
+    kernel_size: 7
+    stride: 7
+  }
+}
+layer {
+  name: "ip"
+  type: "InnerProduct"
+  bottom: "pool"
+  top: "ip"
+  param {
+    lr_mult: 1
+    decay_mult: 1
+  }
+  param {
+    lr_mult: 2
+    decay_mult: 0
+  }
+  inner_product_param {
+    num_output: 10
+    weight_filler {
+      type: "xavier"
+    }
+    bias_filler {
+      type: "constant"
+    }
+  }
+}
+layer {
+  name: "accuracy"
+  type: "Accuracy"
+  bottom: "ip"
+  bottom: "label"
+  top: "accuracy"
+}
+layer {
+  name: "loss"
+  type: "SoftmaxWithLoss"
+  bottom: "ip"
+  bottom: "label"
+  top: "loss"
+}
+I1021 13:01:24.146457 34444 layer_factory.hpp:77] Creating layer mnist
+I1021 13:01:24.146587 34444 net.cpp:84] Creating Layer mnist
+I1021 13:01:24.146597 34444 net.cpp:380] mnist -> data
+I1021 13:01:24.146606 34444 net.cpp:380] mnist -> label
+I1021 13:01:24.180142 34444 net.cpp:122] Setting up mnist
+I1021 13:01:24.180187 34444 net.cpp:129] Top shape: 100 1 28 28 (78400)
+I1021 13:01:24.180193 34444 net.cpp:129] Top shape: 100 (100)
+I1021 13:01:24.180197 34444 net.cpp:137] Memory required for data: 314000
+I1021 13:01:24.180204 34444 layer_factory.hpp:77] Creating layer label_mnist_1_split
+I1021 13:01:24.180240 34444 net.cpp:84] Creating Layer label_mnist_1_split
+I1021 13:01:24.180244 34444 net.cpp:406] label_mnist_1_split <- label
+I1021 13:01:24.180253 34444 net.cpp:380] label_mnist_1_split -> label_mnist_1_split_0
+I1021 13:01:24.180263 34444 net.cpp:380] label_mnist_1_split -> label_mnist_1_split_1
+I1021 13:01:24.180299 34444 net.cpp:122] Setting up label_mnist_1_split
+I1021 13:01:24.180306 34444 net.cpp:129] Top shape: 100 (100)
+I1021 13:01:24.180311 34444 net.cpp:129] Top shape: 100 (100)
+I1021 13:01:24.180313 34444 net.cpp:137] Memory required for data: 314800
+I1021 13:01:24.180316 34444 layer_factory.hpp:77] Creating layer csc
+I1021 13:01:24.180326 34444 net.cpp:84] Creating Layer csc
+I1021 13:01:24.180330 34444 net.cpp:406] csc <- data
+I1021 13:01:24.180335 34444 net.cpp:380] csc -> csc
+I1021 13:01:24.180502 34444 net.cpp:122] Setting up csc
+I1021 13:01:24.180510 34444 net.cpp:129] Top shape: 100 15 28 28 (1176000)
+I1021 13:01:24.180513 34444 net.cpp:137] Memory required for data: 5018800
+I1021 13:01:24.180524 34444 layer_factory.hpp:77] Creating layer pool
+I1021 13:01:24.180534 34444 net.cpp:84] Creating Layer pool
+I1021 13:01:24.180537 34444 net.cpp:406] pool <- csc
+I1021 13:01:24.180542 34444 net.cpp:380] pool -> pool
+I1021 13:01:24.180681 34444 net.cpp:122] Setting up pool
+I1021 13:01:24.180711 34444 net.cpp:129] Top shape: 100 15 4 4 (24000)
+I1021 13:01:24.180716 34444 net.cpp:137] Memory required for data: 5114800
+I1021 13:01:24.180722 34444 layer_factory.hpp:77] Creating layer ip
+I1021 13:01:24.180742 34444 net.cpp:84] Creating Layer ip
+I1021 13:01:24.180747 34444 net.cpp:406] ip <- pool
+I1021 13:01:24.180755 34444 net.cpp:380] ip -> ip
+I1021 13:01:24.180917 34444 net.cpp:122] Setting up ip
+I1021 13:01:24.180923 34444 net.cpp:129] Top shape: 100 10 (1000)
+I1021 13:01:24.180927 34444 net.cpp:137] Memory required for data: 5118800
+I1021 13:01:24.180953 34444 layer_factory.hpp:77] Creating layer ip_ip_0_split
+I1021 13:01:24.180960 34444 net.cpp:84] Creating Layer ip_ip_0_split
+I1021 13:01:24.180964 34444 net.cpp:406] ip_ip_0_split <- ip
+I1021 13:01:24.180969 34444 net.cpp:380] ip_ip_0_split -> ip_ip_0_split_0
+I1021 13:01:24.180975 34444 net.cpp:380] ip_ip_0_split -> ip_ip_0_split_1
+I1021 13:01:24.181015 34444 net.cpp:122] Setting up ip_ip_0_split
+I1021 13:01:24.181020 34444 net.cpp:129] Top shape: 100 10 (1000)
+I1021 13:01:24.181023 34444 net.cpp:129] Top shape: 100 10 (1000)
+I1021 13:01:24.181027 34444 net.cpp:137] Memory required for data: 5126800
+I1021 13:01:24.181052 34444 layer_factory.hpp:77] Creating layer accuracy
+I1021 13:01:24.181059 34444 net.cpp:84] Creating Layer accuracy
+I1021 13:01:24.181064 34444 net.cpp:406] accuracy <- ip_ip_0_split_0
+I1021 13:01:24.181068 34444 net.cpp:406] accuracy <- label_mnist_1_split_0
+I1021 13:01:24.181074 34444 net.cpp:380] accuracy -> accuracy
+I1021 13:01:24.181082 34444 net.cpp:122] Setting up accuracy
+I1021 13:01:24.181087 34444 net.cpp:129] Top shape: (1)
+I1021 13:01:24.181089 34444 net.cpp:137] Memory required for data: 5126804
+I1021 13:01:24.181093 34444 layer_factory.hpp:77] Creating layer loss
+I1021 13:01:24.181099 34444 net.cpp:84] Creating Layer loss
+I1021 13:01:24.181103 34444 net.cpp:406] loss <- ip_ip_0_split_1
+I1021 13:01:24.181107 34444 net.cpp:406] loss <- label_mnist_1_split_1
+I1021 13:01:24.181111 34444 net.cpp:380] loss -> loss
+I1021 13:01:24.181118 34444 layer_factory.hpp:77] Creating layer loss
+I1021 13:01:24.182174 34444 net.cpp:122] Setting up loss
+I1021 13:01:24.182188 34444 net.cpp:129] Top shape: (1)
+I1021 13:01:24.182191 34444 net.cpp:132]     with loss weight 1
+I1021 13:01:24.182204 34444 net.cpp:137] Memory required for data: 5126808
+I1021 13:01:24.182207 34444 net.cpp:198] loss needs backward computation.
+I1021 13:01:24.182211 34444 net.cpp:200] accuracy does not need backward computation.
+I1021 13:01:24.182216 34444 net.cpp:198] ip_ip_0_split needs backward computation.
+I1021 13:01:24.182219 34444 net.cpp:198] ip needs backward computation.
+I1021 13:01:24.182222 34444 net.cpp:198] pool needs backward computation.
+I1021 13:01:24.182225 34444 net.cpp:198] csc needs backward computation.
+I1021 13:01:24.182229 34444 net.cpp:200] label_mnist_1_split does not need backward computation.
+I1021 13:01:24.182232 34444 net.cpp:200] mnist does not need backward computation.
+I1021 13:01:24.182235 34444 net.cpp:242] This network produces output accuracy
+I1021 13:01:24.182238 34444 net.cpp:242] This network produces output loss
+I1021 13:01:24.182246 34444 net.cpp:255] Network initialization done.
+I1021 13:01:24.182296 34444 solver.cpp:56] Solver scaffolding done.
+I1021 13:01:24.182417 34444 caffe.cpp:248] Starting Optimization
+I1021 13:01:24.182426 34444 solver.cpp:272] Solving mnist_balanced_sampler
+I1021 13:01:24.182430 34444 solver.cpp:273] Learning Rate Policy: fixed
+I1021 13:01:55.500402 34444 solver.cpp:218] Iteration 0 (0 iter/s, 31.3179s/1 iters), loss = 2.29503
+I1021 13:01:55.500551 34444 solver.cpp:237]     Train net output #0: accuracy = 0.2
+I1021 13:01:55.500564 34444 solver.cpp:237]     Train net output #1: loss = 2.29503 (* 1 = 2.29503 loss)
+I1021 13:01:55.500572 34444 sgd_solver.cpp:105] Iteration 0, lr = 0.01
+I1021 13:02:24.570293 34444 solver.cpp:218] Iteration 1 (0.0344001 iter/s, 29.0697s/1 iters), loss = 2.29945
+I1021 13:02:24.570401 34444 solver.cpp:237]     Train net output #0: accuracy = 0.07
+I1021 13:02:24.570416 34444 solver.cpp:237]     Train net output #1: loss = 2.29945 (* 1 = 2.29945 loss)
+I1021 13:02:24.570422 34444 sgd_solver.cpp:105] Iteration 1, lr = 0.01
+I1021 13:02:53.571439 34444 solver.cpp:218] Iteration 2 (0.0344815 iter/s, 29.001s/1 iters), loss = 2.29594
+I1021 13:02:53.572455 34444 solver.cpp:237]     Train net output #0: accuracy = 0.12
+I1021 13:02:53.572468 34444 solver.cpp:237]     Train net output #1: loss = 2.29594 (* 1 = 2.29594 loss)
+I1021 13:02:53.572471 34444 sgd_solver.cpp:105] Iteration 2, lr = 0.01
+I1021 13:03:24.071036 34444 solver.cpp:218] Iteration 3 (0.0327884 iter/s, 30.4986s/1 iters), loss = 2.29824
+I1021 13:03:24.071192 34444 solver.cpp:237]     Train net output #0: accuracy = 0.07
+I1021 13:03:24.071204 34444 solver.cpp:237]     Train net output #1: loss = 2.29824 (* 1 = 2.29824 loss)
+I1021 13:03:24.071210 34444 sgd_solver.cpp:105] Iteration 3, lr = 0.01
+I1021 13:03:53.918370 34444 solver.cpp:218] Iteration 4 (0.0335041 iter/s, 29.8471s/1 iters), loss = 2.2969
+I1021 13:03:53.918469 34444 solver.cpp:237]     Train net output #0: accuracy = 0.13
+I1021 13:03:53.918481 34444 solver.cpp:237]     Train net output #1: loss = 2.2969 (* 1 = 2.2969 loss)
+I1021 13:03:53.918486 34444 sgd_solver.cpp:105] Iteration 4, lr = 0.01
+I1021 13:04:23.712617 34444 solver.cpp:218] Iteration 5 (0.0335637 iter/s, 29.7941s/1 iters), loss = 2.29494
+I1021 13:04:23.713490 34444 solver.cpp:237]     Train net output #0: accuracy = 0.16
+I1021 13:04:23.713506 34444 solver.cpp:237]     Train net output #1: loss = 2.29494 (* 1 = 2.29494 loss)
+I1021 13:04:23.713511 34444 sgd_solver.cpp:105] Iteration 5, lr = 0.01
+I1021 13:04:53.209823 34444 solver.cpp:218] Iteration 6 (0.0339026 iter/s, 29.4963s/1 iters), loss = 2.29441
+I1021 13:04:53.209902 34444 solver.cpp:237]     Train net output #0: accuracy = 0.14
+I1021 13:04:53.209913 34444 solver.cpp:237]     Train net output #1: loss = 2.29441 (* 1 = 2.29441 loss)
+I1021 13:04:53.209918 34444 sgd_solver.cpp:105] Iteration 6, lr = 0.01
+I1021 13:05:22.607962 34444 solver.cpp:218] Iteration 7 (0.0340159 iter/s, 29.398s/1 iters), loss = 2.29732
+I1021 13:05:22.608191 34444 solver.cpp:237]     Train net output #0: accuracy = 0.15
+I1021 13:05:22.608204 34444 solver.cpp:237]     Train net output #1: loss = 2.29732 (* 1 = 2.29732 loss)
+I1021 13:05:22.608209 34444 sgd_solver.cpp:105] Iteration 7, lr = 0.01

@@ -1,0 +1,754 @@
+I1003 11:33:31.856317 133060 caffe.cpp:218] Using GPUs 3
+I1003 11:33:31.917484 133060 caffe.cpp:223] GPU 3: Tesla M60
+I1003 11:33:32.492246 133060 solver.cpp:44] Initializing solver from parameters: 
+test_iter: 100
+test_interval: 50
+base_lr: 0.01
+display: 1
+max_iter: 1800
+lr_policy: "fixed"
+momentum: 0.9
+weight_decay: 0.005
+snapshot: 600
+snapshot_prefix: "examples/mnist_csc/snapshots/mnist_csc_simple"
+solver_mode: GPU
+device_id: 3
+debug_info: true
+net: "examples/mnist_csc/mnist_csc_simple.prototxt"
+train_state {
+  level: 0
+  stage: ""
+}
+test_initialization: false
+I1003 11:33:32.492797 133060 solver.cpp:87] Creating training net from net file: examples/mnist_csc/mnist_csc_simple.prototxt
+I1003 11:33:32.493111 133060 net.cpp:294] The NetState phase (0) differed from the phase (1) specified by a rule in layer mnist
+I1003 11:33:32.493221 133060 net.cpp:51] Initializing net from parameters: 
+name: "mnist_csc"
+state {
+  phase: TRAIN
+  level: 0
+  stage: ""
+}
+layer {
+  name: "mnist"
+  type: "Data"
+  top: "data"
+  top: "label"
+  include {
+    phase: TRAIN
+  }
+  transform_param {
+    scale: 0.00390625
+  }
+  data_param {
+    source: "examples/mnist/mnist_train_lmdb"
+    batch_size: 100
+    backend: LMDB
+  }
+}
+layer {
+  name: "csc"
+  type: "CSC"
+  bottom: "data"
+  top: "csc"
+  param {
+    lr_mult: 1
+  }
+  param {
+    lr_mult: 0
+  }
+  csc_param {
+    lambda1: 0.1
+    lambda2: 1
+    boundary: PAD_BOTH
+    kernel_h: 5
+    kernel_w: 5
+    num_output: 100
+    admm_max_iter: 1000
+    admm_max_rho: 1
+    admm_eta: 1.1
+    filler {
+      type: "xavier"
+    }
+    verbose: false
+  }
+}
+layer {
+  name: "pool"
+  type: "Pooling"
+  bottom: "csc"
+  top: "pool"
+  pooling_param {
+    pool: AVE
+    kernel_size: 14
+    stride: 14
+  }
+}
+layer {
+  name: "ip"
+  type: "InnerProduct"
+  bottom: "pool"
+  top: "ip"
+  param {
+    lr_mult: 1
+    decay_mult: 1
+  }
+  param {
+    lr_mult: 2
+    decay_mult: 0
+  }
+  inner_product_param {
+    num_output: 10
+    weight_filler {
+      type: "xavier"
+    }
+    bias_filler {
+      type: "constant"
+    }
+  }
+}
+layer {
+  name: "accuracy"
+  type: "Accuracy"
+  bottom: "ip"
+  bottom: "label"
+  top: "accuracy"
+}
+layer {
+  name: "loss"
+  type: "SoftmaxWithLoss"
+  bottom: "ip"
+  bottom: "label"
+  top: "loss"
+}
+I1003 11:33:32.493314 133060 layer_factory.hpp:77] Creating layer mnist
+I1003 11:33:32.493582 133060 db_lmdb.cpp:35] Opened lmdb examples/mnist/mnist_train_lmdb
+I1003 11:33:32.493630 133060 net.cpp:84] Creating Layer mnist
+I1003 11:33:32.493643 133060 net.cpp:380] mnist -> data
+I1003 11:33:32.493675 133060 net.cpp:380] mnist -> label
+I1003 11:33:32.494607 133060 data_layer.cpp:45] output data size: 100,1,28,28
+I1003 11:33:32.498133 133060 net.cpp:122] Setting up mnist
+I1003 11:33:32.498173 133060 net.cpp:129] Top shape: 100 1 28 28 (78400)
+I1003 11:33:32.498179 133060 net.cpp:129] Top shape: 100 (100)
+I1003 11:33:32.498183 133060 net.cpp:137] Memory required for data: 314000
+I1003 11:33:32.498193 133060 layer_factory.hpp:77] Creating layer label_mnist_1_split
+I1003 11:33:32.498224 133060 net.cpp:84] Creating Layer label_mnist_1_split
+I1003 11:33:32.498229 133060 net.cpp:406] label_mnist_1_split <- label
+I1003 11:33:32.498245 133060 net.cpp:380] label_mnist_1_split -> label_mnist_1_split_0
+I1003 11:33:32.498255 133060 net.cpp:380] label_mnist_1_split -> label_mnist_1_split_1
+I1003 11:33:32.498301 133060 net.cpp:122] Setting up label_mnist_1_split
+I1003 11:33:32.498308 133060 net.cpp:129] Top shape: 100 (100)
+I1003 11:33:32.498312 133060 net.cpp:129] Top shape: 100 (100)
+I1003 11:33:32.498317 133060 net.cpp:137] Memory required for data: 314800
+I1003 11:33:32.498320 133060 layer_factory.hpp:77] Creating layer csc
+I1003 11:33:32.498329 133060 net.cpp:84] Creating Layer csc
+I1003 11:33:32.498334 133060 net.cpp:406] csc <- data
+I1003 11:33:32.498340 133060 net.cpp:380] csc -> csc
+I1003 11:33:32.499580 133060 net.cpp:122] Setting up csc
+I1003 11:33:32.499593 133060 net.cpp:129] Top shape: 100 100 28 28 (7840000)
+I1003 11:33:32.499596 133060 net.cpp:137] Memory required for data: 31674800
+I1003 11:33:32.499632 133060 layer_factory.hpp:77] Creating layer pool
+I1003 11:33:32.499644 133060 net.cpp:84] Creating Layer pool
+I1003 11:33:32.499666 133060 net.cpp:406] pool <- csc
+I1003 11:33:32.499675 133060 net.cpp:380] pool -> pool
+I1003 11:33:32.771101 133060 net.cpp:122] Setting up pool
+I1003 11:33:32.771152 133060 net.cpp:129] Top shape: 100 100 2 2 (40000)
+I1003 11:33:32.771157 133060 net.cpp:137] Memory required for data: 31834800
+I1003 11:33:32.771164 133060 layer_factory.hpp:77] Creating layer ip
+I1003 11:33:32.771185 133060 net.cpp:84] Creating Layer ip
+I1003 11:33:32.771190 133060 net.cpp:406] ip <- pool
+I1003 11:33:32.771200 133060 net.cpp:380] ip -> ip
+I1003 11:33:32.771361 133060 net.cpp:122] Setting up ip
+I1003 11:33:32.771370 133060 net.cpp:129] Top shape: 100 10 (1000)
+I1003 11:33:32.771374 133060 net.cpp:137] Memory required for data: 31838800
+I1003 11:33:32.771384 133060 layer_factory.hpp:77] Creating layer ip_ip_0_split
+I1003 11:33:32.771394 133060 net.cpp:84] Creating Layer ip_ip_0_split
+I1003 11:33:32.771399 133060 net.cpp:406] ip_ip_0_split <- ip
+I1003 11:33:32.771404 133060 net.cpp:380] ip_ip_0_split -> ip_ip_0_split_0
+I1003 11:33:32.771416 133060 net.cpp:380] ip_ip_0_split -> ip_ip_0_split_1
+I1003 11:33:32.771462 133060 net.cpp:122] Setting up ip_ip_0_split
+I1003 11:33:32.771469 133060 net.cpp:129] Top shape: 100 10 (1000)
+I1003 11:33:32.771476 133060 net.cpp:129] Top shape: 100 10 (1000)
+I1003 11:33:32.771478 133060 net.cpp:137] Memory required for data: 31846800
+I1003 11:33:32.771482 133060 layer_factory.hpp:77] Creating layer accuracy
+I1003 11:33:32.771492 133060 net.cpp:84] Creating Layer accuracy
+I1003 11:33:32.771497 133060 net.cpp:406] accuracy <- ip_ip_0_split_0
+I1003 11:33:32.771502 133060 net.cpp:406] accuracy <- label_mnist_1_split_0
+I1003 11:33:32.771508 133060 net.cpp:380] accuracy -> accuracy
+I1003 11:33:32.771519 133060 net.cpp:122] Setting up accuracy
+I1003 11:33:32.771524 133060 net.cpp:129] Top shape: (1)
+I1003 11:33:32.771528 133060 net.cpp:137] Memory required for data: 31846804
+I1003 11:33:32.771533 133060 layer_factory.hpp:77] Creating layer loss
+I1003 11:33:32.771540 133060 net.cpp:84] Creating Layer loss
+I1003 11:33:32.771544 133060 net.cpp:406] loss <- ip_ip_0_split_1
+I1003 11:33:32.771548 133060 net.cpp:406] loss <- label_mnist_1_split_1
+I1003 11:33:32.771554 133060 net.cpp:380] loss -> loss
+I1003 11:33:32.771569 133060 layer_factory.hpp:77] Creating layer loss
+I1003 11:33:32.772987 133060 net.cpp:122] Setting up loss
+I1003 11:33:32.773001 133060 net.cpp:129] Top shape: (1)
+I1003 11:33:32.773006 133060 net.cpp:132]     with loss weight 1
+I1003 11:33:32.773049 133060 net.cpp:137] Memory required for data: 31846808
+I1003 11:33:32.773054 133060 net.cpp:198] loss needs backward computation.
+I1003 11:33:32.773061 133060 net.cpp:200] accuracy does not need backward computation.
+I1003 11:33:32.773064 133060 net.cpp:198] ip_ip_0_split needs backward computation.
+I1003 11:33:32.773068 133060 net.cpp:198] ip needs backward computation.
+I1003 11:33:32.773072 133060 net.cpp:198] pool needs backward computation.
+I1003 11:33:32.773074 133060 net.cpp:198] csc needs backward computation.
+I1003 11:33:32.773078 133060 net.cpp:200] label_mnist_1_split does not need backward computation.
+I1003 11:33:32.773082 133060 net.cpp:200] mnist does not need backward computation.
+I1003 11:33:32.773097 133060 net.cpp:242] This network produces output accuracy
+I1003 11:33:32.773100 133060 net.cpp:242] This network produces output loss
+I1003 11:33:32.773111 133060 net.cpp:255] Network initialization done.
+I1003 11:33:32.773362 133060 solver.cpp:172] Creating test net (#0) specified by net file: examples/mnist_csc/mnist_csc_simple.prototxt
+I1003 11:33:32.773387 133060 net.cpp:294] The NetState phase (1) differed from the phase (0) specified by a rule in layer mnist
+I1003 11:33:32.773463 133060 net.cpp:51] Initializing net from parameters: 
+name: "mnist_csc"
+state {
+  phase: TEST
+}
+layer {
+  name: "mnist"
+  type: "Data"
+  top: "data"
+  top: "label"
+  include {
+    phase: TEST
+  }
+  transform_param {
+    scale: 0.00390625
+  }
+  data_param {
+    source: "examples/mnist/mnist_test_lmdb"
+    batch_size: 100
+    backend: LMDB
+  }
+}
+layer {
+  name: "csc"
+  type: "CSC"
+  bottom: "data"
+  top: "csc"
+  param {
+    lr_mult: 1
+  }
+  param {
+    lr_mult: 0
+  }
+  csc_param {
+    lambda1: 0.1
+    lambda2: 1
+    boundary: PAD_BOTH
+    kernel_h: 5
+    kernel_w: 5
+    num_output: 100
+    admm_max_iter: 1000
+    admm_max_rho: 1
+    admm_eta: 1.1
+    filler {
+      type: "xavier"
+    }
+    verbose: false
+  }
+}
+layer {
+  name: "pool"
+  type: "Pooling"
+  bottom: "csc"
+  top: "pool"
+  pooling_param {
+    pool: AVE
+    kernel_size: 14
+    stride: 14
+  }
+}
+layer {
+  name: "ip"
+  type: "InnerProduct"
+  bottom: "pool"
+  top: "ip"
+  param {
+    lr_mult: 1
+    decay_mult: 1
+  }
+  param {
+    lr_mult: 2
+    decay_mult: 0
+  }
+  inner_product_param {
+    num_output: 10
+    weight_filler {
+      type: "xavier"
+    }
+    bias_filler {
+      type: "constant"
+    }
+  }
+}
+layer {
+  name: "accuracy"
+  type: "Accuracy"
+  bottom: "ip"
+  bottom: "label"
+  top: "accuracy"
+}
+layer {
+  name: "loss"
+  type: "SoftmaxWithLoss"
+  bottom: "ip"
+  bottom: "label"
+  top: "loss"
+}
+I1003 11:33:32.773536 133060 layer_factory.hpp:77] Creating layer mnist
+I1003 11:33:32.773598 133060 db_lmdb.cpp:35] Opened lmdb examples/mnist/mnist_test_lmdb
+I1003 11:33:32.773625 133060 net.cpp:84] Creating Layer mnist
+I1003 11:33:32.773633 133060 net.cpp:380] mnist -> data
+I1003 11:33:32.773643 133060 net.cpp:380] mnist -> label
+I1003 11:33:32.773728 133060 data_layer.cpp:45] output data size: 100,1,28,28
+I1003 11:33:32.776098 133060 net.cpp:122] Setting up mnist
+I1003 11:33:32.776130 133060 net.cpp:129] Top shape: 100 1 28 28 (78400)
+I1003 11:33:32.776135 133060 net.cpp:129] Top shape: 100 (100)
+I1003 11:33:32.776139 133060 net.cpp:137] Memory required for data: 314000
+I1003 11:33:32.776142 133060 layer_factory.hpp:77] Creating layer label_mnist_1_split
+I1003 11:33:32.776150 133060 net.cpp:84] Creating Layer label_mnist_1_split
+I1003 11:33:32.776155 133060 net.cpp:406] label_mnist_1_split <- label
+I1003 11:33:32.776180 133060 net.cpp:380] label_mnist_1_split -> label_mnist_1_split_0
+I1003 11:33:32.776187 133060 net.cpp:380] label_mnist_1_split -> label_mnist_1_split_1
+I1003 11:33:32.776271 133060 net.cpp:122] Setting up label_mnist_1_split
+I1003 11:33:32.776279 133060 net.cpp:129] Top shape: 100 (100)
+I1003 11:33:32.776284 133060 net.cpp:129] Top shape: 100 (100)
+I1003 11:33:32.776288 133060 net.cpp:137] Memory required for data: 314800
+I1003 11:33:32.776291 133060 layer_factory.hpp:77] Creating layer csc
+I1003 11:33:32.776299 133060 net.cpp:84] Creating Layer csc
+I1003 11:33:32.776304 133060 net.cpp:406] csc <- data
+I1003 11:33:32.776310 133060 net.cpp:380] csc -> csc
+I1003 11:33:32.776465 133060 net.cpp:122] Setting up csc
+I1003 11:33:32.776473 133060 net.cpp:129] Top shape: 100 100 28 28 (7840000)
+I1003 11:33:32.776476 133060 net.cpp:137] Memory required for data: 31674800
+I1003 11:33:32.776486 133060 layer_factory.hpp:77] Creating layer pool
+I1003 11:33:32.776496 133060 net.cpp:84] Creating Layer pool
+I1003 11:33:32.776500 133060 net.cpp:406] pool <- csc
+I1003 11:33:32.776505 133060 net.cpp:380] pool -> pool
+I1003 11:33:32.776695 133060 net.cpp:122] Setting up pool
+I1003 11:33:32.776705 133060 net.cpp:129] Top shape: 100 100 2 2 (40000)
+I1003 11:33:32.776710 133060 net.cpp:137] Memory required for data: 31834800
+I1003 11:33:32.776713 133060 layer_factory.hpp:77] Creating layer ip
+I1003 11:33:32.776722 133060 net.cpp:84] Creating Layer ip
+I1003 11:33:32.776726 133060 net.cpp:406] ip <- pool
+I1003 11:33:32.776732 133060 net.cpp:380] ip -> ip
+I1003 11:33:32.776850 133060 net.cpp:122] Setting up ip
+I1003 11:33:32.776857 133060 net.cpp:129] Top shape: 100 10 (1000)
+I1003 11:33:32.776861 133060 net.cpp:137] Memory required for data: 31838800
+I1003 11:33:32.776870 133060 layer_factory.hpp:77] Creating layer ip_ip_0_split
+I1003 11:33:32.776886 133060 net.cpp:84] Creating Layer ip_ip_0_split
+I1003 11:33:32.776891 133060 net.cpp:406] ip_ip_0_split <- ip
+I1003 11:33:32.776896 133060 net.cpp:380] ip_ip_0_split -> ip_ip_0_split_0
+I1003 11:33:32.776903 133060 net.cpp:380] ip_ip_0_split -> ip_ip_0_split_1
+I1003 11:33:32.776953 133060 net.cpp:122] Setting up ip_ip_0_split
+I1003 11:33:32.776960 133060 net.cpp:129] Top shape: 100 10 (1000)
+I1003 11:33:32.776965 133060 net.cpp:129] Top shape: 100 10 (1000)
+I1003 11:33:32.776968 133060 net.cpp:137] Memory required for data: 31846800
+I1003 11:33:32.776973 133060 layer_factory.hpp:77] Creating layer accuracy
+I1003 11:33:32.776979 133060 net.cpp:84] Creating Layer accuracy
+I1003 11:33:32.776983 133060 net.cpp:406] accuracy <- ip_ip_0_split_0
+I1003 11:33:32.776988 133060 net.cpp:406] accuracy <- label_mnist_1_split_0
+I1003 11:33:32.776993 133060 net.cpp:380] accuracy -> accuracy
+I1003 11:33:32.777000 133060 net.cpp:122] Setting up accuracy
+I1003 11:33:32.777005 133060 net.cpp:129] Top shape: (1)
+I1003 11:33:32.777009 133060 net.cpp:137] Memory required for data: 31846804
+I1003 11:33:32.777012 133060 layer_factory.hpp:77] Creating layer loss
+I1003 11:33:32.777019 133060 net.cpp:84] Creating Layer loss
+I1003 11:33:32.777021 133060 net.cpp:406] loss <- ip_ip_0_split_1
+I1003 11:33:32.777025 133060 net.cpp:406] loss <- label_mnist_1_split_1
+I1003 11:33:32.777029 133060 net.cpp:380] loss -> loss
+I1003 11:33:32.777036 133060 layer_factory.hpp:77] Creating layer loss
+I1003 11:33:32.777853 133060 net.cpp:122] Setting up loss
+I1003 11:33:32.777868 133060 net.cpp:129] Top shape: (1)
+I1003 11:33:32.777873 133060 net.cpp:132]     with loss weight 1
+I1003 11:33:32.777881 133060 net.cpp:137] Memory required for data: 31846808
+I1003 11:33:32.777885 133060 net.cpp:198] loss needs backward computation.
+I1003 11:33:32.777889 133060 net.cpp:200] accuracy does not need backward computation.
+I1003 11:33:32.777894 133060 net.cpp:198] ip_ip_0_split needs backward computation.
+I1003 11:33:32.777897 133060 net.cpp:198] ip needs backward computation.
+I1003 11:33:32.777900 133060 net.cpp:198] pool needs backward computation.
+I1003 11:33:32.777904 133060 net.cpp:198] csc needs backward computation.
+I1003 11:33:32.777909 133060 net.cpp:200] label_mnist_1_split does not need backward computation.
+I1003 11:33:32.777914 133060 net.cpp:200] mnist does not need backward computation.
+I1003 11:33:32.777917 133060 net.cpp:242] This network produces output accuracy
+I1003 11:33:32.777921 133060 net.cpp:242] This network produces output loss
+I1003 11:33:32.777930 133060 net.cpp:255] Network initialization done.
+I1003 11:33:32.777968 133060 solver.cpp:56] Solver scaffolding done.
+I1003 11:33:32.778082 133060 caffe.cpp:248] Starting Optimization
+I1003 11:33:32.778091 133060 solver.cpp:272] Solving mnist_csc
+I1003 11:33:32.778095 133060 solver.cpp:273] Learning Rate Policy: fixed
+I1003 11:33:32.778874 133060 net.cpp:591]     [Forward] Layer mnist, top blob data data: 0.1261
+I1003 11:33:32.778936 133060 net.cpp:591]     [Forward] Layer mnist, top blob label data: 4.27
+I1003 11:33:32.778995 133060 net.cpp:591]     [Forward] Layer label_mnist_1_split, top blob label_mnist_1_split_0 data: 4.27
+I1003 11:33:32.779044 133060 net.cpp:591]     [Forward] Layer label_mnist_1_split, top blob label_mnist_1_split_1 data: 4.27
+I1003 11:33:33.389205 133060 net.cpp:591]     [Forward] Layer csc, top blob csc data: 0.00121736
+I1003 11:33:33.389320 133060 net.cpp:603]     [Forward] Layer csc, param blob 0 data: 0.08555
+I1003 11:33:33.389386 133060 net.cpp:603]     [Forward] Layer csc, param blob 1 data: 0.1
+I1003 11:33:33.390475 133060 net.cpp:591]     [Forward] Layer pool, top blob pool data: 0.00120307
+I1003 11:33:33.391263 133060 net.cpp:591]     [Forward] Layer ip, top blob ip data: 0.00160812
+I1003 11:33:33.391347 133060 net.cpp:603]     [Forward] Layer ip, param blob 0 data: 0.0429849
+I1003 11:33:33.391392 133060 net.cpp:603]     [Forward] Layer ip, param blob 1 data: 0
+I1003 11:33:33.391445 133060 net.cpp:591]     [Forward] Layer ip_ip_0_split, top blob ip_ip_0_split_0 data: 0.00160812
+I1003 11:33:33.391492 133060 net.cpp:591]     [Forward] Layer ip_ip_0_split, top blob ip_ip_0_split_1 data: 0.00160812
+I1003 11:33:33.391683 133060 net.cpp:591]     [Forward] Layer accuracy, top blob accuracy data: 0.1
+I1003 11:33:33.392032 133060 net.cpp:591]     [Forward] Layer loss, top blob loss data: 2.30245
+I1003 11:33:33.392155 133060 net.cpp:619]     [Backward] Layer loss, bottom blob ip_ip_0_split_1 diff: 0.00179997
+I1003 11:33:33.392243 133060 net.cpp:619]     [Backward] Layer ip_ip_0_split, bottom blob ip diff: 0.00179997
+I1003 11:33:33.392374 133060 net.cpp:619]     [Backward] Layer ip, bottom blob pool diff: 0.000402657
+I1003 11:33:33.392421 133060 net.cpp:630]     [Backward] Layer ip, param blob 0 diff: 4.64355e-05
+I1003 11:33:33.392468 133060 net.cpp:630]     [Backward] Layer ip, param blob 1 diff: 0.0219967
+I1003 11:33:33.394245 133060 net.cpp:619]     [Backward] Layer pool, bottom blob csc diff: 2.05437e-06
+I1003 11:34:28.319438 133060 net.cpp:630]     [Backward] Layer csc, param blob 0 diff: 1.28109e-05
+E1003 11:34:28.320098 133060 net.cpp:719]     [Backward] All net params (data, diff): L1 norm = (385.915, 0.437736); L2 norm = (5.86913, 0.0861733)
+I1003 11:34:28.320643 133060 solver.cpp:218] Iteration 0 (-23602.5 iter/s, 55.5425s/1 iters), loss = 2.30245
+I1003 11:34:28.320665 133060 solver.cpp:237]     Train net output #0: accuracy = 0.1
+I1003 11:34:28.320675 133060 solver.cpp:237]     Train net output #1: loss = 2.30245 (* 1 = 2.30245 loss)
+I1003 11:34:28.320684 133060 sgd_solver.cpp:105] Iteration 0, lr = 0.01
+I1003 11:34:28.321059 133060 net.cpp:591]     [Forward] Layer mnist, top blob data data: 0.126516
+I1003 11:34:28.321115 133060 net.cpp:591]     [Forward] Layer mnist, top blob label data: 4.39
+I1003 11:34:28.321233 133060 net.cpp:591]     [Forward] Layer label_mnist_1_split, top blob label_mnist_1_split_0 data: 4.39
+I1003 11:34:28.321281 133060 net.cpp:591]     [Forward] Layer label_mnist_1_split, top blob label_mnist_1_split_1 data: 4.39
+I1003 11:34:28.867686 133060 net.cpp:591]     [Forward] Layer csc, top blob csc data: 0.00122839
+I1003 11:34:28.867775 133060 net.cpp:603]     [Forward] Layer csc, param blob 0 data: 0.0855457
+I1003 11:34:28.867815 133060 net.cpp:603]     [Forward] Layer csc, param blob 1 data: 0.1
+I1003 11:34:28.868243 133060 net.cpp:591]     [Forward] Layer pool, top blob pool data: 0.00121333
+I1003 11:34:28.868363 133060 net.cpp:591]     [Forward] Layer ip, top blob ip data: 0.00178692
+I1003 11:34:28.868414 133060 net.cpp:603]     [Forward] Layer ip, param blob 0 data: 0.0429827
+I1003 11:34:28.868455 133060 net.cpp:603]     [Forward] Layer ip, param blob 1 data: 0.000439934
+I1003 11:34:28.868504 133060 net.cpp:591]     [Forward] Layer ip_ip_0_split, top blob ip_ip_0_split_0 data: 0.00178692
+I1003 11:34:28.868549 133060 net.cpp:591]     [Forward] Layer ip_ip_0_split, top blob ip_ip_0_split_1 data: 0.00178692
+I1003 11:34:28.868638 133060 net.cpp:591]     [Forward] Layer accuracy, top blob accuracy data: 0.07
+I1003 11:34:28.868834 133060 net.cpp:591]     [Forward] Layer loss, top blob loss data: 2.30287
+I1003 11:34:28.868913 133060 net.cpp:619]     [Backward] Layer loss, bottom blob ip_ip_0_split_1 diff: 0.00180006
+I1003 11:34:28.868973 133060 net.cpp:619]     [Backward] Layer ip_ip_0_split, bottom blob ip diff: 0.00180006
+I1003 11:34:28.869071 133060 net.cpp:619]     [Backward] Layer ip, bottom blob pool diff: 0.000401632
+I1003 11:34:28.869118 133060 net.cpp:630]     [Backward] Layer ip, param blob 0 diff: 4.22122e-05
+I1003 11:34:28.869158 133060 net.cpp:630]     [Backward] Layer ip, param blob 1 diff: 0.0180398
+I1003 11:34:28.869992 133060 net.cpp:619]     [Backward] Layer pool, bottom blob csc diff: 2.04914e-06
+I1003 11:35:24.277204 133060 net.cpp:630]     [Backward] Layer csc, param blob 0 diff: 9.78765e-06
+E1003 11:35:24.277940 133060 net.cpp:719]     [Backward] All net params (data, diff): L1 norm = (385.9, 0.373716); L2 norm = (5.86883, 0.0682077)
+I1003 11:35:24.278020 133060 solver.cpp:218] Iteration 1 (0.0178708 iter/s, 55.9573s/1 iters), loss = 2.30287
+I1003 11:35:24.278038 133060 solver.cpp:237]     Train net output #0: accuracy = 0.07
+I1003 11:35:24.278048 133060 solver.cpp:237]     Train net output #1: loss = 2.30287 (* 1 = 2.30287 loss)
+I1003 11:35:24.278054 133060 sgd_solver.cpp:105] Iteration 1, lr = 0.01
+I1003 11:35:24.278208 133060 net.cpp:591]     [Forward] Layer mnist, top blob data data: 0.128461
+I1003 11:35:24.278328 133060 net.cpp:591]     [Forward] Layer mnist, top blob label data: 3.98
+I1003 11:35:24.278373 133060 net.cpp:591]     [Forward] Layer label_mnist_1_split, top blob label_mnist_1_split_0 data: 3.98
+I1003 11:35:24.278422 133060 net.cpp:591]     [Forward] Layer label_mnist_1_split, top blob label_mnist_1_split_1 data: 3.98
+I1003 11:35:24.824879 133060 net.cpp:591]     [Forward] Layer csc, top blob csc data: 0.00124776
+I1003 11:35:24.824946 133060 net.cpp:603]     [Forward] Layer csc, param blob 0 data: 0.0855376
+I1003 11:35:24.824991 133060 net.cpp:603]     [Forward] Layer csc, param blob 1 data: 0.1
+I1003 11:35:24.825392 133060 net.cpp:591]     [Forward] Layer pool, top blob pool data: 0.001233
+I1003 11:35:24.825503 133060 net.cpp:591]     [Forward] Layer ip, top blob ip data: 0.00210003
+I1003 11:35:24.825549 133060 net.cpp:603]     [Forward] Layer ip, param blob 0 data: 0.0429787
+I1003 11:35:24.825592 133060 net.cpp:603]     [Forward] Layer ip, param blob 1 data: 0.000873724
+I1003 11:35:24.825636 133060 net.cpp:591]     [Forward] Layer ip_ip_0_split, top blob ip_ip_0_split_0 data: 0.00210003
+I1003 11:35:24.825678 133060 net.cpp:591]     [Forward] Layer ip_ip_0_split, top blob ip_ip_0_split_1 data: 0.00210003
+I1003 11:35:24.825754 133060 net.cpp:591]     [Forward] Layer accuracy, top blob accuracy data: 0.14
+I1003 11:35:24.825965 133060 net.cpp:591]     [Forward] Layer loss, top blob loss data: 2.30236
+I1003 11:35:24.826035 133060 net.cpp:619]     [Backward] Layer loss, bottom blob ip_ip_0_split_1 diff: 0.00179995
+I1003 11:35:24.826087 133060 net.cpp:619]     [Backward] Layer ip_ip_0_split, bottom blob ip diff: 0.00179995
+I1003 11:35:24.826174 133060 net.cpp:619]     [Backward] Layer ip, bottom blob pool diff: 0.000401703
+I1003 11:35:24.826217 133060 net.cpp:630]     [Backward] Layer ip, param blob 0 diff: 4.65237e-05
+I1003 11:35:24.826261 133060 net.cpp:630]     [Backward] Layer ip, param blob 1 diff: 0.0199258
+I1003 11:35:24.827085 133060 net.cpp:619]     [Backward] Layer pool, bottom blob csc diff: 2.04951e-06
+I1003 11:36:20.041748 133060 net.cpp:630]     [Backward] Layer csc, param blob 0 diff: 1.1216e-05
+E1003 11:36:20.044016 133060 net.cpp:719]     [Backward] All net params (data, diff): L1 norm = (385.867, 0.413393); L2 norm = (5.86828, 0.0746991)
+I1003 11:36:20.044085 133060 solver.cpp:218] Iteration 2 (0.0179321 iter/s, 55.766s/1 iters), loss = 2.30236
+I1003 11:36:20.044102 133060 solver.cpp:237]     Train net output #0: accuracy = 0.14
+I1003 11:36:20.044129 133060 solver.cpp:237]     Train net output #1: loss = 2.30236 (* 1 = 2.30236 loss)
+I1003 11:36:20.044136 133060 sgd_solver.cpp:105] Iteration 2, lr = 0.01
+I1003 11:36:20.044270 133060 net.cpp:591]     [Forward] Layer mnist, top blob data data: 0.124598
+I1003 11:36:20.044368 133060 net.cpp:591]     [Forward] Layer mnist, top blob label data: 4.67
+I1003 11:36:20.044423 133060 net.cpp:591]     [Forward] Layer label_mnist_1_split, top blob label_mnist_1_split_0 data: 4.67
+I1003 11:36:20.044469 133060 net.cpp:591]     [Forward] Layer label_mnist_1_split, top blob label_mnist_1_split_1 data: 4.67
+I1003 11:36:20.590785 133060 net.cpp:591]     [Forward] Layer csc, top blob csc data: 0.00120665
+I1003 11:36:20.590837 133060 net.cpp:603]     [Forward] Layer csc, param blob 0 data: 0.085526
+I1003 11:36:20.590906 133060 net.cpp:603]     [Forward] Layer csc, param blob 1 data: 0.1
+I1003 11:36:20.591298 133060 net.cpp:591]     [Forward] Layer pool, top blob pool data: 0.00119312
+I1003 11:36:20.591423 133060 net.cpp:591]     [Forward] Layer ip, top blob ip data: 0.0026111
+I1003 11:36:20.591467 133060 net.cpp:603]     [Forward] Layer ip, param blob 0 data: 0.0429728
+I1003 11:36:20.591511 133060 net.cpp:603]     [Forward] Layer ip, param blob 1 data: 0.00154598
+I1003 11:36:20.591553 133060 net.cpp:591]     [Forward] Layer ip_ip_0_split, top blob ip_ip_0_split_0 data: 0.0026111
+I1003 11:36:20.591595 133060 net.cpp:591]     [Forward] Layer ip_ip_0_split, top blob ip_ip_0_split_1 data: 0.0026111
+I1003 11:36:20.591667 133060 net.cpp:591]     [Forward] Layer accuracy, top blob accuracy data: 0.12
+I1003 11:36:20.591856 133060 net.cpp:591]     [Forward] Layer loss, top blob loss data: 2.30287
+I1003 11:36:20.591924 133060 net.cpp:619]     [Backward] Layer loss, bottom blob ip_ip_0_split_1 diff: 0.00180006
+I1003 11:36:20.591979 133060 net.cpp:619]     [Backward] Layer ip_ip_0_split, bottom blob ip diff: 0.00180006
+I1003 11:36:20.592067 133060 net.cpp:619]     [Backward] Layer ip, bottom blob pool diff: 0.000401993
+I1003 11:36:20.592110 133060 net.cpp:630]     [Backward] Layer ip, param blob 0 diff: 4.50364e-05
+I1003 11:36:20.592154 133060 net.cpp:630]     [Backward] Layer ip, param blob 1 diff: 0.0299312
+I1003 11:36:20.592983 133060 net.cpp:619]     [Backward] Layer pool, bottom blob csc diff: 2.05098e-06
+I1003 11:37:13.594305 133060 net.cpp:630]     [Backward] Layer csc, param blob 0 diff: 1.34283e-05
+E1003 11:37:13.595077 133060 net.cpp:719]     [Backward] All net params (data, diff): L1 norm = (385.822, 0.513028); L2 norm = (5.86748, 0.10019)
+I1003 11:37:13.595134 133060 solver.cpp:218] Iteration 3 (0.0186738 iter/s, 53.551s/1 iters), loss = 2.30287
+I1003 11:37:13.595151 133060 solver.cpp:237]     Train net output #0: accuracy = 0.12
+I1003 11:37:13.595165 133060 solver.cpp:237]     Train net output #1: loss = 2.30287 (* 1 = 2.30287 loss)
+I1003 11:37:13.595170 133060 sgd_solver.cpp:105] Iteration 3, lr = 0.01
+I1003 11:37:13.595332 133060 net.cpp:591]     [Forward] Layer mnist, top blob data data: 0.122766
+I1003 11:37:13.595384 133060 net.cpp:591]     [Forward] Layer mnist, top blob label data: 4.33
+I1003 11:37:13.595440 133060 net.cpp:591]     [Forward] Layer label_mnist_1_split, top blob label_mnist_1_split_0 data: 4.33
+I1003 11:37:13.595546 133060 net.cpp:591]     [Forward] Layer label_mnist_1_split, top blob label_mnist_1_split_1 data: 4.33
+I1003 11:37:14.141834 133060 net.cpp:591]     [Forward] Layer csc, top blob csc data: 0.0011951
+I1003 11:37:14.141924 133060 net.cpp:603]     [Forward] Layer csc, param blob 0 data: 0.0855113
+I1003 11:37:14.141963 133060 net.cpp:603]     [Forward] Layer csc, param blob 1 data: 0.1
+I1003 11:37:14.142374 133060 net.cpp:591]     [Forward] Layer pool, top blob pool data: 0.00117885
+I1003 11:37:14.142494 133060 net.cpp:591]     [Forward] Layer ip, top blob ip data: 0.003165
+I1003 11:37:14.142585 133060 net.cpp:603]     [Forward] Layer ip, param blob 0 data: 0.0429654
+I1003 11:37:14.142635 133060 net.cpp:603]     [Forward] Layer ip, param blob 1 data: 0.00225128
+I1003 11:37:14.142688 133060 net.cpp:591]     [Forward] Layer ip_ip_0_split, top blob ip_ip_0_split_0 data: 0.003165
+I1003 11:37:14.142735 133060 net.cpp:591]     [Forward] Layer ip_ip_0_split, top blob ip_ip_0_split_1 data: 0.003165
+I1003 11:37:14.142835 133060 net.cpp:591]     [Forward] Layer accuracy, top blob accuracy data: 0.14
+I1003 11:37:14.143039 133060 net.cpp:591]     [Forward] Layer loss, top blob loss data: 2.30228
+I1003 11:37:14.143127 133060 net.cpp:619]     [Backward] Layer loss, bottom blob ip_ip_0_split_1 diff: 0.00179994
+I1003 11:37:14.143194 133060 net.cpp:619]     [Backward] Layer ip_ip_0_split, bottom blob ip diff: 0.00179994
+I1003 11:37:14.143301 133060 net.cpp:619]     [Backward] Layer ip, bottom blob pool diff: 0.000401368
+I1003 11:37:14.143347 133060 net.cpp:630]     [Backward] Layer ip, param blob 0 diff: 4.08758e-05
+I1003 11:37:14.143391 133060 net.cpp:630]     [Backward] Layer ip, param blob 1 diff: 0.0119059
+I1003 11:37:14.144232 133060 net.cpp:619]     [Backward] Layer pool, bottom blob csc diff: 2.0478e-06
+I1003 11:38:08.183900 133060 net.cpp:630]     [Backward] Layer csc, param blob 0 diff: 1.00253e-05
+E1003 11:38:08.184617 133060 net.cpp:719]     [Backward] All net params (data, diff): L1 norm = (385.762, 0.307626); L2 norm = (5.86648, 0.0507122)
+I1003 11:38:08.184700 133060 solver.cpp:218] Iteration 4 (0.0183185 iter/s, 54.5895s/1 iters), loss = 2.30228
+I1003 11:38:08.184713 133060 solver.cpp:237]     Train net output #0: accuracy = 0.14
+I1003 11:38:08.184725 133060 solver.cpp:237]     Train net output #1: loss = 2.30228 (* 1 = 2.30228 loss)
+I1003 11:38:08.184748 133060 sgd_solver.cpp:105] Iteration 4, lr = 0.01
+I1003 11:38:08.184881 133060 net.cpp:591]     [Forward] Layer mnist, top blob data data: 0.122319
+I1003 11:38:08.184975 133060 net.cpp:591]     [Forward] Layer mnist, top blob label data: 4.46
+I1003 11:38:08.185031 133060 net.cpp:591]     [Forward] Layer label_mnist_1_split, top blob label_mnist_1_split_0 data: 4.46
+I1003 11:38:08.185078 133060 net.cpp:591]     [Forward] Layer label_mnist_1_split, top blob label_mnist_1_split_1 data: 4.46
+I1003 11:38:08.731654 133060 net.cpp:591]     [Forward] Layer csc, top blob csc data: 0.00118634
+I1003 11:38:08.731709 133060 net.cpp:603]     [Forward] Layer csc, param blob 0 data: 0.0854938
+I1003 11:38:08.731781 133060 net.cpp:603]     [Forward] Layer csc, param blob 1 data: 0.1
+I1003 11:38:08.732203 133060 net.cpp:591]     [Forward] Layer pool, top blob pool data: 0.0011699
+I1003 11:38:08.732331 133060 net.cpp:591]     [Forward] Layer ip, top blob ip data: 0.00377518
+I1003 11:38:08.732375 133060 net.cpp:603]     [Forward] Layer ip, param blob 0 data: 0.0429566
+I1003 11:38:08.732410 133060 net.cpp:603]     [Forward] Layer ip, param blob 1 data: 0.00300792
+I1003 11:38:08.732478 133060 net.cpp:591]     [Forward] Layer ip_ip_0_split, top blob ip_ip_0_split_0 data: 0.00377518
+I1003 11:38:08.732522 133060 net.cpp:591]     [Forward] Layer ip_ip_0_split, top blob ip_ip_0_split_1 data: 0.00377518
+I1003 11:38:08.732606 133060 net.cpp:591]     [Forward] Layer accuracy, top blob accuracy data: 0.13
+I1003 11:38:08.732789 133060 net.cpp:591]     [Forward] Layer loss, top blob loss data: 2.30276
+I1003 11:38:08.732858 133060 net.cpp:619]     [Backward] Layer loss, bottom blob ip_ip_0_split_1 diff: 0.00180003
+I1003 11:38:08.732913 133060 net.cpp:619]     [Backward] Layer ip_ip_0_split, bottom blob ip diff: 0.00180003
+I1003 11:38:08.733000 133060 net.cpp:619]     [Backward] Layer ip, bottom blob pool diff: 0.000400891
+I1003 11:38:08.733045 133060 net.cpp:630]     [Backward] Layer ip, param blob 0 diff: 3.94959e-05
+I1003 11:38:08.733088 133060 net.cpp:630]     [Backward] Layer ip, param blob 1 diff: 0.014114
+I1003 11:38:08.733911 133060 net.cpp:619]     [Backward] Layer pool, bottom blob csc diff: 2.04536e-06
+I1003 11:39:01.356618 133060 net.cpp:630]     [Backward] Layer csc, param blob 0 diff: 8.9778e-06
+E1003 11:39:01.357384 133060 net.cpp:719]     [Backward] All net params (data, diff): L1 norm = (385.691, 0.321568); L2 norm = (5.86528, 0.056827)
+I1003 11:39:01.357455 133060 solver.cpp:218] Iteration 5 (0.0188066 iter/s, 53.1727s/1 iters), loss = 2.30276
+I1003 11:39:01.357489 133060 solver.cpp:237]     Train net output #0: accuracy = 0.13
+I1003 11:39:01.357501 133060 solver.cpp:237]     Train net output #1: loss = 2.30276 (* 1 = 2.30276 loss)
+I1003 11:39:01.357506 133060 sgd_solver.cpp:105] Iteration 5, lr = 0.01
+I1003 11:39:01.357650 133060 net.cpp:591]     [Forward] Layer mnist, top blob data data: 0.125136
+I1003 11:39:01.357750 133060 net.cpp:591]     [Forward] Layer mnist, top blob label data: 4.18
+I1003 11:39:01.357800 133060 net.cpp:591]     [Forward] Layer label_mnist_1_split, top blob label_mnist_1_split_0 data: 4.18
+I1003 11:39:01.357843 133060 net.cpp:591]     [Forward] Layer label_mnist_1_split, top blob label_mnist_1_split_1 data: 4.18
+I1003 11:39:01.903723 133060 net.cpp:591]     [Forward] Layer csc, top blob csc data: 0.00121045
+I1003 11:39:01.903774 133060 net.cpp:603]     [Forward] Layer csc, param blob 0 data: 0.0854737
+I1003 11:39:01.903827 133060 net.cpp:603]     [Forward] Layer csc, param blob 1 data: 0.1
+I1003 11:39:01.904239 133060 net.cpp:591]     [Forward] Layer pool, top blob pool data: 0.001195
+I1003 11:39:01.904362 133060 net.cpp:591]     [Forward] Layer ip, top blob ip data: 0.00438873
+I1003 11:39:01.904407 133060 net.cpp:603]     [Forward] Layer ip, param blob 0 data: 0.0429465
+I1003 11:39:01.904448 133060 net.cpp:603]     [Forward] Layer ip, param blob 1 data: 0.00372843
+I1003 11:39:01.904491 133060 net.cpp:591]     [Forward] Layer ip_ip_0_split, top blob ip_ip_0_split_0 data: 0.00438873
+I1003 11:39:01.904533 133060 net.cpp:591]     [Forward] Layer ip_ip_0_split, top blob ip_ip_0_split_1 data: 0.00438873
+I1003 11:39:01.904605 133060 net.cpp:591]     [Forward] Layer accuracy, top blob accuracy data: 0.11
+I1003 11:39:01.904791 133060 net.cpp:591]     [Forward] Layer loss, top blob loss data: 2.30224
+I1003 11:39:01.904858 133060 net.cpp:619]     [Backward] Layer loss, bottom blob ip_ip_0_split_1 diff: 0.00179993
+I1003 11:39:01.904912 133060 net.cpp:619]     [Backward] Layer ip_ip_0_split, bottom blob ip diff: 0.00179993
+I1003 11:39:01.905004 133060 net.cpp:619]     [Backward] Layer ip, bottom blob pool diff: 0.000400986
+I1003 11:39:01.905050 133060 net.cpp:630]     [Backward] Layer ip, param blob 0 diff: 4.2708e-05
+I1003 11:39:01.905094 133060 net.cpp:630]     [Backward] Layer ip, param blob 1 diff: 0.0198143
+I1003 11:39:01.905913 133060 net.cpp:619]     [Backward] Layer pool, bottom blob csc diff: 2.04585e-06
+I1003 11:39:55.550876 133060 net.cpp:630]     [Backward] Layer csc, param blob 0 diff: 9.83514e-06
+E1003 11:39:55.551651 133060 net.cpp:719]     [Backward] All net params (data, diff): L1 norm = (385.608, 0.393563); L2 norm = (5.86391, 0.0703611)
+I1003 11:39:55.551717 133060 solver.cpp:218] Iteration 6 (0.0184522 iter/s, 54.1942s/1 iters), loss = 2.30224
+I1003 11:39:55.551751 133060 solver.cpp:237]     Train net output #0: accuracy = 0.11
+I1003 11:39:55.551762 133060 solver.cpp:237]     Train net output #1: loss = 2.30224 (* 1 = 2.30224 loss)
+I1003 11:39:55.551767 133060 sgd_solver.cpp:105] Iteration 6, lr = 0.01
+I1003 11:39:55.551911 133060 net.cpp:591]     [Forward] Layer mnist, top blob data data: 0.137649
+I1003 11:39:55.552017 133060 net.cpp:591]     [Forward] Layer mnist, top blob label data: 5.15
+I1003 11:39:55.552067 133060 net.cpp:591]     [Forward] Layer label_mnist_1_split, top blob label_mnist_1_split_0 data: 5.15
+I1003 11:39:55.552111 133060 net.cpp:591]     [Forward] Layer label_mnist_1_split, top blob label_mnist_1_split_1 data: 5.15
+I1003 11:39:56.098769 133060 net.cpp:591]     [Forward] Layer csc, top blob csc data: 0.00131935
+I1003 11:39:56.098840 133060 net.cpp:603]     [Forward] Layer csc, param blob 0 data: 0.0854514
+I1003 11:39:56.098876 133060 net.cpp:603]     [Forward] Layer csc, param blob 1 data: 0.1
+I1003 11:39:56.099280 133060 net.cpp:591]     [Forward] Layer pool, top blob pool data: 0.0013058
+I1003 11:39:56.099386 133060 net.cpp:591]     [Forward] Layer ip, top blob ip data: 0.00511696
+I1003 11:39:56.099426 133060 net.cpp:603]     [Forward] Layer ip, param blob 0 data: 0.0429353
+I1003 11:39:56.099462 133060 net.cpp:603]     [Forward] Layer ip, param blob 1 data: 0.00452885
+I1003 11:39:56.099506 133060 net.cpp:591]     [Forward] Layer ip_ip_0_split, top blob ip_ip_0_split_0 data: 0.00511696
+I1003 11:39:56.099548 133060 net.cpp:591]     [Forward] Layer ip_ip_0_split, top blob ip_ip_0_split_1 data: 0.00511696
+I1003 11:39:56.099622 133060 net.cpp:591]     [Forward] Layer accuracy, top blob accuracy data: 0.08
+I1003 11:39:56.099813 133060 net.cpp:591]     [Forward] Layer loss, top blob loss data: 2.30386
+I1003 11:39:56.099880 133060 net.cpp:619]     [Backward] Layer loss, bottom blob ip_ip_0_split_1 diff: 0.00180025
+I1003 11:39:56.099936 133060 net.cpp:619]     [Backward] Layer ip_ip_0_split, bottom blob ip diff: 0.00180025
+I1003 11:39:56.100021 133060 net.cpp:619]     [Backward] Layer ip, bottom blob pool diff: 0.000401516
+I1003 11:39:56.100067 133060 net.cpp:630]     [Backward] Layer ip, param blob 0 diff: 5.34059e-05
+I1003 11:39:56.100111 133060 net.cpp:630]     [Backward] Layer ip, param blob 1 diff: 0.0223863
+I1003 11:39:56.100930 133060 net.cpp:619]     [Backward] Layer pool, bottom blob csc diff: 2.04855e-06
+I1003 11:40:55.493247 133060 net.cpp:630]     [Backward] Layer csc, param blob 0 diff: 1.53421e-05
+E1003 11:40:55.493976 133060 net.cpp:719]     [Backward] All net params (data, diff): L1 norm = (385.515, 0.475842); L2 norm = (5.8624, 0.108018)
+I1003 11:40:55.494027 133060 solver.cpp:218] Iteration 7 (0.0166827 iter/s, 59.9422s/1 iters), loss = 2.30386
+I1003 11:40:55.494042 133060 solver.cpp:237]     Train net output #0: accuracy = 0.08
+I1003 11:40:55.494055 133060 solver.cpp:237]     Train net output #1: loss = 2.30386 (* 1 = 2.30386 loss)
+I1003 11:40:55.494061 133060 sgd_solver.cpp:105] Iteration 7, lr = 0.01
+I1003 11:40:55.494205 133060 net.cpp:591]     [Forward] Layer mnist, top blob data data: 0.134033
+I1003 11:40:55.494271 133060 net.cpp:591]     [Forward] Layer mnist, top blob label data: 4.38
+I1003 11:40:55.494381 133060 net.cpp:591]     [Forward] Layer label_mnist_1_split, top blob label_mnist_1_split_0 data: 4.38
+I1003 11:40:55.494431 133060 net.cpp:591]     [Forward] Layer label_mnist_1_split, top blob label_mnist_1_split_1 data: 4.38
+I1003 11:40:56.039373 133060 net.cpp:591]     [Forward] Layer csc, top blob csc data: 0.00129317
+I1003 11:40:56.039430 133060 net.cpp:603]     [Forward] Layer csc, param blob 0 data: 0.085427
+I1003 11:40:56.039469 133060 net.cpp:603]     [Forward] Layer csc, param blob 1 data: 0.1
+I1003 11:40:56.039866 133060 net.cpp:591]     [Forward] Layer pool, top blob pool data: 0.00127946
+I1003 11:40:56.039980 133060 net.cpp:591]     [Forward] Layer ip, top blob ip data: 0.00562459
+I1003 11:40:56.040027 133060 net.cpp:603]     [Forward] Layer ip, param blob 0 data: 0.0429231
+I1003 11:40:56.040063 133060 net.cpp:603]     [Forward] Layer ip, param blob 1 data: 0.00520918
+I1003 11:40:56.040110 133060 net.cpp:591]     [Forward] Layer ip_ip_0_split, top blob ip_ip_0_split_0 data: 0.00562459
+I1003 11:40:56.040155 133060 net.cpp:591]     [Forward] Layer ip_ip_0_split, top blob ip_ip_0_split_1 data: 0.00562459
+I1003 11:40:56.040233 133060 net.cpp:591]     [Forward] Layer accuracy, top blob accuracy data: 0.08
+I1003 11:40:56.040428 133060 net.cpp:591]     [Forward] Layer loss, top blob loss data: 2.30243
+I1003 11:40:56.040504 133060 net.cpp:619]     [Backward] Layer loss, bottom blob ip_ip_0_split_1 diff: 0.00179996
+I1003 11:40:56.040561 133060 net.cpp:619]     [Backward] Layer ip_ip_0_split, bottom blob ip diff: 0.00179996
+I1003 11:40:56.040654 133060 net.cpp:619]     [Backward] Layer ip, bottom blob pool diff: 0.000401323
+I1003 11:40:56.040699 133060 net.cpp:630]     [Backward] Layer ip, param blob 0 diff: 4.44128e-05
+I1003 11:40:56.040737 133060 net.cpp:630]     [Backward] Layer ip, param blob 1 diff: 0.0218686
+I1003 11:40:56.041569 133060 net.cpp:619]     [Backward] Layer pool, bottom blob csc diff: 2.04756e-06
+I1003 11:41:53.743095 133060 net.cpp:630]     [Backward] Layer csc, param blob 0 diff: 1.01244e-05
+E1003 11:41:53.744508 133060 net.cpp:719]     [Backward] All net params (data, diff): L1 norm = (385.412, 0.421648); L2 norm = (5.86073, 0.0747577)
+I1003 11:41:53.744575 133060 solver.cpp:218] Iteration 8 (0.0171672 iter/s, 58.2505s/1 iters), loss = 2.30243
+I1003 11:41:53.744608 133060 solver.cpp:237]     Train net output #0: accuracy = 0.08
+I1003 11:41:53.744618 133060 solver.cpp:237]     Train net output #1: loss = 2.30243 (* 1 = 2.30243 loss)
+I1003 11:41:53.744624 133060 sgd_solver.cpp:105] Iteration 8, lr = 0.01
+I1003 11:41:53.744758 133060 net.cpp:591]     [Forward] Layer mnist, top blob data data: 0.129802
+I1003 11:41:53.744853 133060 net.cpp:591]     [Forward] Layer mnist, top blob label data: 4.71
+I1003 11:41:53.744907 133060 net.cpp:591]     [Forward] Layer label_mnist_1_split, top blob label_mnist_1_split_0 data: 4.71
+I1003 11:41:53.744954 133060 net.cpp:591]     [Forward] Layer label_mnist_1_split, top blob label_mnist_1_split_1 data: 4.71
+I1003 11:41:54.291446 133060 net.cpp:591]     [Forward] Layer csc, top blob csc data: 0.00125822
+I1003 11:41:54.291501 133060 net.cpp:603]     [Forward] Layer csc, param blob 0 data: 0.0854008
+I1003 11:41:54.291570 133060 net.cpp:603]     [Forward] Layer csc, param blob 1 data: 0.1
+I1003 11:41:54.291977 133060 net.cpp:591]     [Forward] Layer pool, top blob pool data: 0.00124305
+I1003 11:41:54.292098 133060 net.cpp:591]     [Forward] Layer ip, top blob ip data: 0.00628942
+I1003 11:41:54.292145 133060 net.cpp:603]     [Forward] Layer ip, param blob 0 data: 0.0429099
+I1003 11:41:54.292187 133060 net.cpp:603]     [Forward] Layer ip, param blob 1 data: 0.00601181
+I1003 11:41:54.292232 133060 net.cpp:591]     [Forward] Layer ip_ip_0_split, top blob ip_ip_0_split_0 data: 0.00628942
+I1003 11:41:54.292274 133060 net.cpp:591]     [Forward] Layer ip_ip_0_split, top blob ip_ip_0_split_1 data: 0.00628942
+I1003 11:41:54.292347 133060 net.cpp:591]     [Forward] Layer accuracy, top blob accuracy data: 0.1
+I1003 11:41:54.292557 133060 net.cpp:591]     [Forward] Layer loss, top blob loss data: 2.30222
+I1003 11:41:54.292626 133060 net.cpp:619]     [Backward] Layer loss, bottom blob ip_ip_0_split_1 diff: 0.00179992
+I1003 11:41:54.292681 133060 net.cpp:619]     [Backward] Layer ip_ip_0_split, bottom blob ip diff: 0.00179992
+I1003 11:41:54.292775 133060 net.cpp:619]     [Backward] Layer ip, bottom blob pool diff: 0.000400599
+I1003 11:41:54.292819 133060 net.cpp:630]     [Backward] Layer ip, param blob 0 diff: 4.73201e-05
+I1003 11:41:54.292860 133060 net.cpp:630]     [Backward] Layer ip, param blob 1 diff: 0.0242458
+I1003 11:41:54.293686 133060 net.cpp:619]     [Backward] Layer pool, bottom blob csc diff: 2.04387e-06
+I1003 11:42:51.305621 133060 net.cpp:630]     [Backward] Layer csc, param blob 0 diff: 1.09336e-05
+E1003 11:42:51.306434 133060 net.cpp:719]     [Backward] All net params (data, diff): L1 norm = (385.302, 0.459073); L2 norm = (5.85894, 0.11107)
+I1003 11:42:51.306506 133060 solver.cpp:218] Iteration 9 (0.0173726 iter/s, 57.5619s/1 iters), loss = 2.30222
+I1003 11:42:51.306522 133060 solver.cpp:237]     Train net output #0: accuracy = 0.1
+I1003 11:42:51.306550 133060 solver.cpp:237]     Train net output #1: loss = 2.30222 (* 1 = 2.30222 loss)
+I1003 11:42:51.306555 133060 sgd_solver.cpp:105] Iteration 9, lr = 0.01
+I1003 11:42:51.306690 133060 net.cpp:591]     [Forward] Layer mnist, top blob data data: 0.114203
+I1003 11:42:51.306785 133060 net.cpp:591]     [Forward] Layer mnist, top blob label data: 4.17
+I1003 11:42:51.306844 133060 net.cpp:591]     [Forward] Layer label_mnist_1_split, top blob label_mnist_1_split_0 data: 4.17
+I1003 11:42:51.306890 133060 net.cpp:591]     [Forward] Layer label_mnist_1_split, top blob label_mnist_1_split_1 data: 4.17
+I1003 11:42:51.853852 133060 net.cpp:591]     [Forward] Layer csc, top blob csc data: 0.00111534
+I1003 11:42:51.853905 133060 net.cpp:603]     [Forward] Layer csc, param blob 0 data: 0.085373
+I1003 11:42:51.854007 133060 net.cpp:603]     [Forward] Layer csc, param blob 1 data: 0.1
+I1003 11:42:51.854400 133060 net.cpp:591]     [Forward] Layer pool, top blob pool data: 0.00109871
+I1003 11:42:51.854528 133060 net.cpp:591]     [Forward] Layer ip, top blob ip data: 0.00711808
+I1003 11:42:51.854573 133060 net.cpp:603]     [Forward] Layer ip, param blob 0 data: 0.0428959
+I1003 11:42:51.854614 133060 net.cpp:603]     [Forward] Layer ip, param blob 1 data: 0.00684239
+I1003 11:42:51.854657 133060 net.cpp:591]     [Forward] Layer ip_ip_0_split, top blob ip_ip_0_split_0 data: 0.00711808
+I1003 11:42:51.854699 133060 net.cpp:591]     [Forward] Layer ip_ip_0_split, top blob ip_ip_0_split_1 data: 0.00711808
+I1003 11:42:51.854782 133060 net.cpp:591]     [Forward] Layer accuracy, top blob accuracy data: 0.16
+I1003 11:42:51.854969 133060 net.cpp:591]     [Forward] Layer loss, top blob loss data: 2.30068
+I1003 11:42:51.855036 133060 net.cpp:619]     [Backward] Layer loss, bottom blob ip_ip_0_split_1 diff: 0.00179961
+I1003 11:42:51.855089 133060 net.cpp:619]     [Backward] Layer ip_ip_0_split, bottom blob ip diff: 0.00179961
+I1003 11:42:51.855175 133060 net.cpp:619]     [Backward] Layer ip, bottom blob pool diff: 0.000400814
+I1003 11:42:51.855218 133060 net.cpp:630]     [Backward] Layer ip, param blob 0 diff: 3.72293e-05
+I1003 11:42:51.855259 133060 net.cpp:630]     [Backward] Layer ip, param blob 1 diff: 0.0256245
+I1003 11:42:51.856102 133060 net.cpp:619]     [Backward] Layer pool, bottom blob csc diff: 2.04497e-06
+I1003 11:43:42.876638 133060 net.cpp:630]     [Backward] Layer csc, param blob 0 diff: 8.77121e-06
+E1003 11:43:42.877460 133060 net.cpp:719]     [Backward] All net params (data, diff): L1 norm = (385.185, 0.42709); L2 norm = (5.85705, 0.0970194)
+I1003 11:43:42.877517 133060 solver.cpp:218] Iteration 10 (0.0193908 iter/s, 51.571s/1 iters), loss = 2.30068
+I1003 11:43:42.877533 133060 solver.cpp:237]     Train net output #0: accuracy = 0.16
+I1003 11:43:42.877543 133060 solver.cpp:237]     Train net output #1: loss = 2.30068 (* 1 = 2.30068 loss)
+I1003 11:43:42.877550 133060 sgd_solver.cpp:105] Iteration 10, lr = 0.01
+I1003 11:43:42.877687 133060 net.cpp:591]     [Forward] Layer mnist, top blob data data: 0.121616
+I1003 11:43:42.877782 133060 net.cpp:591]     [Forward] Layer mnist, top blob label data: 4.56
+I1003 11:43:42.877836 133060 net.cpp:591]     [Forward] Layer label_mnist_1_split, top blob label_mnist_1_split_0 data: 4.56
+I1003 11:43:42.877882 133060 net.cpp:591]     [Forward] Layer label_mnist_1_split, top blob label_mnist_1_split_1 data: 4.56
+I1003 11:43:43.424260 133060 net.cpp:591]     [Forward] Layer csc, top blob csc data: 0.00118278
+I1003 11:43:43.424360 133060 net.cpp:603]     [Forward] Layer csc, param blob 0 data: 0.0853437
+I1003 11:43:43.424399 133060 net.cpp:603]     [Forward] Layer csc, param blob 1 data: 0.1
+I1003 11:43:43.424820 133060 net.cpp:591]     [Forward] Layer pool, top blob pool data: 0.00116463
+I1003 11:43:43.424943 133060 net.cpp:591]     [Forward] Layer ip, top blob ip data: 0.00833807
+I1003 11:43:43.424991 133060 net.cpp:603]     [Forward] Layer ip, param blob 0 data: 0.0428812
+I1003 11:43:43.425030 133060 net.cpp:603]     [Forward] Layer ip, param blob 1 data: 0.0078964
+I1003 11:43:43.425077 133060 net.cpp:591]     [Forward] Layer ip_ip_0_split, top blob ip_ip_0_split_0 data: 0.00833807
+I1003 11:43:43.425122 133060 net.cpp:591]     [Forward] Layer ip_ip_0_split, top blob ip_ip_0_split_1 data: 0.00833807
+I1003 11:43:43.425212 133060 net.cpp:591]     [Forward] Layer accuracy, top blob accuracy data: 0.11
+I1003 11:43:43.425426 133060 net.cpp:591]     [Forward] Layer loss, top blob loss data: 2.30116
+I1003 11:43:43.425509 133060 net.cpp:619]     [Backward] Layer loss, bottom blob ip_ip_0_split_1 diff: 0.00179971
+I1003 11:43:43.425566 133060 net.cpp:619]     [Backward] Layer ip_ip_0_split, bottom blob ip diff: 0.00179971
+I1003 11:43:43.425667 133060 net.cpp:619]     [Backward] Layer ip, bottom blob pool diff: 0.000401674
+I1003 11:43:43.425712 133060 net.cpp:630]     [Backward] Layer ip, param blob 0 diff: 4.00273e-05
+I1003 11:43:43.425750 133060 net.cpp:630]     [Backward] Layer ip, param blob 1 diff: 0.0215033
+I1003 11:43:43.426584 133060 net.cpp:619]     [Backward] Layer pool, bottom blob csc diff: 2.04936e-06
+I1003 11:44:39.740833 133060 net.cpp:630]     [Backward] Layer csc, param blob 0 diff: 9.01125e-06
+E1003 11:44:39.741571 133060 net.cpp:719]     [Backward] All net params (data, diff): L1 norm = (385.063, 0.397671); L2 norm = (5.85505, 0.0819723)
+I1003 11:44:39.741627 133060 solver.cpp:218] Iteration 11 (0.0175858 iter/s, 56.864s/1 iters), loss = 2.30116
+I1003 11:44:39.741644 133060 solver.cpp:237]     Train net output #0: accuracy = 0.11
+I1003 11:44:39.741655 133060 solver.cpp:237]     Train net output #1: loss = 2.30116 (* 1 = 2.30116 loss)
+I1003 11:44:39.741663 133060 sgd_solver.cpp:105] Iteration 11, lr = 0.01
+I1003 11:44:39.741824 133060 net.cpp:591]     [Forward] Layer mnist, top blob data data: 0.156343
+I1003 11:44:39.741878 133060 net.cpp:591]     [Forward] Layer mnist, top blob label data: 5.01
+I1003 11:44:39.741992 133060 net.cpp:591]     [Forward] Layer label_mnist_1_split, top blob label_mnist_1_split_0 data: 5.01
+I1003 11:44:39.742040 133060 net.cpp:591]     [Forward] Layer label_mnist_1_split, top blob label_mnist_1_split_1 data: 5.01
+I1003 11:44:40.292695 133060 net.cpp:591]     [Forward] Layer csc, top blob csc data: 0.00147502
+I1003 11:44:40.292793 133060 net.cpp:603]     [Forward] Layer csc, param blob 0 data: 0.085313
+I1003 11:44:40.292832 133060 net.cpp:603]     [Forward] Layer csc, param blob 1 data: 0.1
+I1003 11:44:40.293316 133060 net.cpp:591]     [Forward] Layer pool, top blob pool data: 0.00146462
+I1003 11:44:40.293481 133060 net.cpp:591]     [Forward] Layer ip, top blob ip data: 0.010191
+I1003 11:44:40.293530 133060 net.cpp:603]     [Forward] Layer ip, param blob 0 data: 0.0428658
+I1003 11:44:40.293568 133060 net.cpp:603]     [Forward] Layer ip, param blob 1 data: 0.00918937
+I1003 11:44:40.293615 133060 net.cpp:591]     [Forward] Layer ip_ip_0_split, top blob ip_ip_0_split_0 data: 0.010191
+I1003 11:44:40.293661 133060 net.cpp:591]     [Forward] Layer ip_ip_0_split, top blob ip_ip_0_split_1 data: 0.010191
+I1003 11:44:40.293761 133060 net.cpp:591]     [Forward] Layer accuracy, top blob accuracy data: 0.11
+I1003 11:44:40.294009 133060 net.cpp:591]     [Forward] Layer loss, top blob loss data: 2.30287
+I1003 11:44:40.294101 133060 net.cpp:619]     [Backward] Layer loss, bottom blob ip_ip_0_split_1 diff: 0.00180004
+I1003 11:44:40.294167 133060 net.cpp:619]     [Backward] Layer ip_ip_0_split, bottom blob ip diff: 0.00180004
+I1003 11:44:40.294309 133060 net.cpp:619]     [Backward] Layer ip, bottom blob pool diff: 0.000401317
+I1003 11:44:40.294356 133060 net.cpp:630]     [Backward] Layer ip, param blob 0 diff: 5.52525e-05
+I1003 11:44:40.294394 133060 net.cpp:630]     [Backward] Layer ip, param blob 1 diff: 0.0239977
+I1003 11:44:40.295253 133060 net.cpp:619]     [Backward] Layer pool, bottom blob csc diff: 2.04753e-06
+I1003 11:45:54.628043 133060 net.cpp:630]     [Backward] Layer csc, param blob 0 diff: 1.68358e-05
+E1003 11:45:54.628818 133060 net.cpp:719]     [Backward] All net params (data, diff): L1 norm = (384.938, 0.503077); L2 norm = (5.85298, 0.104536)
+I1003 11:45:54.628895 133060 solver.cpp:218] Iteration 12 (0.0133534 iter/s, 74.8872s/1 iters), loss = 2.30287
+I1003 11:45:54.628916 133060 solver.cpp:237]     Train net output #0: accuracy = 0.11
+I1003 11:45:54.628928 133060 solver.cpp:237]     Train net output #1: loss = 2.30287 (* 1 = 2.30287 loss)
+I1003 11:45:54.628934 133060 sgd_solver.cpp:105] Iteration 12, lr = 0.01
+I1003 11:45:54.629115 133060 net.cpp:591]     [Forward] Layer mnist, top blob data data: 0.157286
+I1003 11:45:54.629180 133060 net.cpp:591]     [Forward] Layer mnist, top blob label data: 4.65
+I1003 11:45:54.629233 133060 net.cpp:591]     [Forward] Layer label_mnist_1_split, top blob label_mnist_1_split_0 data: 4.65
+I1003 11:45:54.629333 133060 net.cpp:591]     [Forward] Layer label_mnist_1_split, top blob label_mnist_1_split_1 data: 4.65
+I1003 11:45:55.174736 133060 net.cpp:591]     [Forward] Layer csc, top blob csc data: 0.00148463
+I1003 11:45:55.174839 133060 net.cpp:603]     [Forward] Layer csc, param blob 0 data: 0.0852811
+I1003 11:45:55.174878 133060 net.cpp:603]     [Forward] Layer csc, param blob 1 data: 0.1
+I1003 11:45:55.175302 133060 net.cpp:591]     [Forward] Layer pool, top blob pool data: 0.00147417
+I1003 11:45:55.175432 133060 net.cpp:591]     [Forward] Layer ip, top blob ip data: 0.0115445
+I1003 11:45:55.175480 133060 net.cpp:603]     [Forward] Layer ip, param blob 0 data: 0.0428498
+I1003 11:45:55.175516 133060 net.cpp:603]     [Forward] Layer ip, param blob 1 data: 0.0104546
+I1003 11:45:55.175565 133060 net.cpp:591]     [Forward] Layer ip_ip_0_split, top blob ip_ip_0_split_0 data: 0.0115445
+I1003 11:45:55.175608 133060 net.cpp:591]     [Forward] Layer ip_ip_0_split, top blob ip_ip_0_split_1 data: 0.0115445
+I1003 11:45:55.175695 133060 net.cpp:591]     [Forward] Layer accuracy, top blob accuracy data: 0.07
+I1003 11:45:55.175882 133060 net.cpp:591]     [Forward] Layer loss, top blob loss data: 2.30262
+I1003 11:45:55.175957 133060 net.cpp:619]     [Backward] Layer loss, bottom blob ip_ip_0_split_1 diff: 0.00179999
+I1003 11:45:55.176013 133060 net.cpp:619]     [Backward] Layer ip_ip_0_split, bottom blob ip diff: 0.00179999
+I1003 11:45:55.176106 133060 net.cpp:619]     [Backward] Layer ip, bottom blob pool diff: 0.000399561
+I1003 11:45:55.176151 133060 net.cpp:630]     [Backward] Layer ip, param blob 0 diff: 5.65797e-05
+I1003 11:45:55.176189 133060 net.cpp:630]     [Backward] Layer ip, param blob 1 diff: 0.0261425
+I1003 11:45:55.177013 133060 net.cpp:619]     [Backward] Layer pool, bottom blob csc diff: 2.03858e-06
